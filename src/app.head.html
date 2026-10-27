@@ -1,0 +1,644 @@
+<title>FPV Wave Estimator</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400..600&family=Inter+Tight:wght@500;600&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+Thai:wght@400..600&display=swap">
+<style>
+/* Layout: tool shell — reservoir chart on its UTM grid fills the left; a calculation panel on the right that can be minimised to a floating
+   result card or maximised to two columns. Tokens follow DESIGN(2).md (Paperclip): near-black canvas, charcoal cards with 10% white hairlines,
+   white pill for the one main action, Inter Tight titles / Inter UI / JetBrains Mono labels, status colour only for state. Single dark theme by design. */
+:root {
+  --canvas: #0A0A0A;
+  --raised: #141413;
+  --card: #171717;
+  --hover: #262626;
+  --ink: #FAFAFA;
+  --ink-pure: #FFFFFF;
+  --on-primary: #141413;
+  --muted: #A1A1A1;
+  --muted-warm: #9A958A;
+  --hair: rgba(255, 255, 255, 0.10);
+  --hair-hi: #A1A1A1;
+  --wash: rgba(255, 255, 255, 0.04);
+  --success: #22C55E;
+  --warning: #F59E0B;
+  --error: #DC2626;
+  --error-text: #F05252;
+  --blue: #2563EB;
+  --tint-navy: #1A2A40;
+  --tint-teal: #1A3A38;
+  --shadow: #00000066 0 18px 40px -28px, 0 0 0 1px rgba(255, 255, 255, 0.10);
+  /* chart */
+  --map-land: #141413;
+  --map-water: #0D1622;
+  --map-shore: rgba(161, 161, 161, 0.80);
+  --map-grid: rgba(255, 255, 255, 0.06);
+  --map-ray: rgba(255, 255, 255, 0.15);
+  --map-sel: #FAFAFA;
+  --map-pv: rgba(250, 250, 250, 0.09);
+  --font-display: "Inter Tight", "Noto Sans Thai", "Leelawadee UI", system-ui, sans-serif;
+  --font-sans: "Inter", "Noto Sans Thai", "Leelawadee UI", "Thonburi", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Geist Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --pw: 420px;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--canvas); color: var(--ink); font-family: var(--font-sans); font-size: 14.4px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+sub, sup { line-height: 0; }
+.mono { font-family: var(--font-mono); }
+.app { display: grid; grid-template-rows: auto 1fr; height: 100%; }
+
+/* header */
+header.top {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px 28px; min-height: 64px;
+  padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  background: var(--canvas); border-bottom: 1px solid var(--hair);
+}
+.brand { display: flex; align-items: center; gap: 12px; margin-right: auto; min-width: 0; }
+.mark { width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--hair); background: var(--card); display: grid; place-items: center; flex: none; }
+.brand h1 { margin: 0; font: 600 16px/1.3 var(--font-display); letter-spacing: -0.4px; }
+.brand p { margin: 0; font: 500 10px/1.55 var(--font-mono); letter-spacing: 0.5px; color: var(--muted); text-transform: uppercase; }
+.tabs { display: flex; gap: 6px; overflow-x: auto; max-width: 100%; scrollbar-width: none; padding: 4px 4px 4px 0; }
+.tabs::-webkit-scrollbar { display: none; }
+.tab {
+  flex: none; height: 36px; padding: 0 14px; border-radius: 9999px; border: 1px solid var(--hair); background: transparent; color: var(--muted);
+  font: 400 13px/1 var(--font-sans); cursor: pointer; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap;
+}
+.tab:hover { color: var(--ink); border-color: var(--hair-hi); }
+.tab[aria-selected="true"] { background: var(--card); color: var(--ink); border-color: var(--hair-hi); }
+.tab .code { font: 400 11px/1 var(--font-mono); letter-spacing: 0.44px; color: var(--muted); }
+.tab[aria-selected="true"] .code { color: var(--success); }
+
+main.split { display: grid; grid-template-columns: minmax(0, 1fr) var(--pw); min-height: 0; }
+.app[data-panel="max"] { --pw: min(980px, 64vw); }
+.app[data-panel="min"] main.split { grid-template-columns: minmax(0, 1fr); }
+.app[data-panel="min"] .panel { display: none; }
+.mapwrap { position: relative; min-height: 0; background: var(--map-land); overflow: hidden; touch-action: none; }
+#map { display: block; width: 100%; height: 100%; cursor: crosshair; }
+#map.onpiece { cursor: pointer; }
+
+/* panel */
+.panel { overflow-y: auto; border-left: 1px solid var(--hair); background: var(--canvas); min-width: 0; display: flex; flex-direction: column; }
+.phead {
+  position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 8px; min-height: 52px;
+  padding-block: 8px; padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(12px, env(safe-area-inset-right, 0px));
+  background: var(--canvas); border-bottom: 1px solid var(--hair);
+}
+.phead .eyebrow { margin-right: auto; }
+.iconbtn { width: 36px; height: 36px; border-radius: 9999px; border: 1px solid transparent; background: transparent; color: var(--muted); display: grid; place-items: center; cursor: pointer; flex: none; }
+.iconbtn:hover { background: var(--hover); color: var(--ink); }
+.iconbtn svg { width: 16px; height: 16px; }
+.panel-inner { display: flex; flex-direction: column; gap: 0; padding-block: 4px 40px; padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)); }
+.col { display: flex; flex-direction: column; min-width: 0; }
+.panel { container-type: inline-size; }
+@container (min-width: 720px) { .panel-inner { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 32px; align-items: start; } .col-b { padding-top: 20px; } }
+.app.chk-max .col-b, .app.chk-max .col-a > section:first-child { display: none; }
+.app.chk-max .panel-inner { display: flex; align-items: stretch; }
+main.split { position: relative; }
+.resizer { position: absolute; top: 0; bottom: 0; right: calc(var(--pw) - 5px); width: 10px; cursor: col-resize; z-index: 4; touch-action: none; }
+.resizer::after { content: ""; position: absolute; left: 4px; top: 0; bottom: 0; width: 2px; background: transparent; transition: background 0.15s; }
+.resizer:hover::after, .resizer.on::after, .resizer:focus-visible::after { background: var(--blue); }
+.app[data-panel="min"] .resizer { display: none; }
+body.resizing { cursor: col-resize; user-select: none; }
+body.resizing #map { pointer-events: none; }
+.cardhead { display: flex; align-items: flex-start; gap: 8px; }
+.cardhead .title { flex: 1; min-width: 0; }
+.cardbtns { display: flex; gap: 2px; margin: -6px -8px 0 0; }
+#chkCard[data-state="min"] .cbody { display: none; }
+.cbody { display: flex; flex-direction: column; gap: 14px; }
+#chkMiniSum { text-align: right; }
+.modal { position: fixed; inset: 0; z-index: 20; background: rgba(0, 0, 0, 0.72); display: flex; flex-direction: column; padding-block: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); gap: 12px; }
+.modal-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; background: var(--card); border: 1px solid var(--hair); border-radius: 11.2px; padding: 12px 16px; }
+.modal-t { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.modal iframe { flex: 1; width: 100%; max-width: 900px; margin: 0 auto; border: 0; border-radius: 8px; background: #fff; box-shadow: var(--shadow); }
+.capwrap { flex: 1; min-height: 0; overflow: auto; display: grid; place-items: center; }
+.capwrap img { max-width: 100%; max-height: 100%; border-radius: 8px; box-shadow: var(--shadow); }
+.vtbl td.ok { color: var(--success); } .vtbl td.warn { color: var(--warning); }
+.vtbl tr.cur td { background: var(--card); }
+.steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; font-size: 13px; color: var(--muted); line-height: 1.6; }
+.steps b { color: var(--ink); font-weight: 500; }
+@media (max-width: 900px) {
+  .app { height: auto; display: block; }
+  main.split { display: block; }
+  .mapwrap { height: 62vh; min-height: 360px; }
+  .panel { border-left: 0; border-top: 1px solid var(--hair); overflow: visible; }
+  .phead { position: static; padding-left: max(16px, env(safe-area-inset-left, 0px)); }
+  .panel-inner { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  #pMax { display: none; }
+  .resizer { display: none; }
+}
+
+/* map overlays */
+.mapbar { position: absolute; top: 12px; left: 12px; right: 56px; display: flex; flex-wrap: wrap; gap: 6px; pointer-events: none; }
+.mapbar > * { pointer-events: auto; }
+.grp { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  height: 32px; padding: 0 14px; border-radius: 9999px; border: 1px solid var(--hair); background: rgba(10, 10, 10, 0.82);
+  color: var(--ink); font: 400 13px/1 var(--font-sans); cursor: pointer; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap;
+}
+.chip:hover { border-color: var(--hair-hi); background: var(--card); }
+.chip[aria-pressed="true"] { background: var(--card); border-color: var(--hair-hi); }
+select.chip { padding: 0 10px; width: auto; }
+.chip .sw { width: 8px; height: 8px; border-radius: 9999px; border: 1.5px solid var(--muted); flex: none; }
+.chip[aria-pressed="true"] .sw { background: var(--success); border-color: var(--success); }
+.zoom { position: absolute; right: 12px; bottom: 36px; display: flex; flex-direction: column; gap: 6px; }
+.zoom .chip { width: 36px; height: 36px; padding: 0; justify-content: center; font: 400 16px/1 var(--font-mono); }
+.readout, .attrib { position: absolute; bottom: 8px; font-size: 11px; color: var(--muted); background: rgba(10, 10, 10, 0.78); padding: 2px 8px; border-radius: 9999px; }
+.readout { left: 12px; font-family: var(--font-mono); max-width: calc(100% - 24px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.attrib { right: 12px; max-width: 42%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hint, .toast {
+  position: absolute; left: 50%; transform: translateX(-50%); max-width: calc(100% - 24px); width: max-content; text-align: center;
+  background: var(--ink); color: var(--on-primary); font-size: 13px; padding: 8px 16px; border-radius: 9999px; pointer-events: none;
+}
+.hint { bottom: 112px; }
+.toast { bottom: 48px; }
+.legend {
+  position: absolute; left: 12px; bottom: 64px; display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; max-width: calc(100% - 80px);
+  padding: 7px 14px; border-radius: 9999px; background: rgba(10, 10, 10, 0.82); border: 1px solid var(--hair); font-size: 12px; color: var(--muted);
+}
+.legend span { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.lg { width: 16px; height: 4px; border-radius: 2px; flex: none; }
+.lg.ok { background: var(--success); } .lg.near { background: var(--warning); } .lg.over { background: var(--error); }
+.lg.na { background: repeating-linear-gradient(90deg, var(--muted) 0 3px, transparent 3px 6px); }
+
+/* minimised panel → floating result card */
+.mini {
+  position: absolute; top: 12px; right: 12px; width: 272px; z-index: 2; background: var(--card); border-radius: 11.2px; box-shadow: var(--shadow);
+  padding: 12px 14px; display: flex; flex-direction: column; gap: 8px;
+}
+.mini-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.mini-n { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; }
+.mini-n .k { font: 500 10px/1.55 var(--font-mono); letter-spacing: 0.5px; color: var(--muted); text-transform: uppercase; }
+.mini-n .v { font: 600 22px/1.05 var(--font-display); letter-spacing: -0.6px; font-variant-numeric: tabular-nums; }
+.mini-n .v small { font: 400 12px var(--font-sans); color: var(--muted); letter-spacing: 0; margin-left: 2px; }
+.mini .meta { font: 400 11px/1.55 var(--font-mono); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.app[data-panel="min"] .mapbar { right: 296px; }
+@media (max-width: 900px) { .mini { top: auto; bottom: 104px; left: 12px; right: auto; width: 248px; } .app[data-panel="min"] .mapbar { right: 56px; } .app[data-panel="min"] .mapwrap { height: calc(100vh - 150px); } }
+
+/* floating sample card */
+.pop {
+  position: absolute; z-index: 3; width: 272px; max-width: calc(100% - 24px); background: var(--card); color: var(--ink);
+  border-radius: 11.2px; box-shadow: var(--shadow); padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 8px; font-size: 13px;
+}
+.pop-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.pop-head b { font: 600 14.4px/1.25 var(--font-display); }
+.pop .hsline { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.pop .num { font: 600 30px/1 var(--font-display); letter-spacing: -0.9px; font-variant-numeric: tabular-nums; }
+.pop .num small { font: 400 13px var(--font-sans); color: var(--muted); margin-left: 2px; letter-spacing: 0; }
+
+/* type helpers */
+.eyebrow { margin: 0; font: 500 11px/1.55 var(--font-mono); letter-spacing: 1.1px; color: var(--muted); text-transform: uppercase; }
+.tag { font: 400 11px/1.55 var(--font-mono); letter-spacing: 0.44px; color: var(--muted); }
+.title { margin: 0; font: 600 19.2px/1.25 var(--font-display); letter-spacing: -0.576px; text-wrap: balance; }
+.title .tag { margin-left: 8px; color: var(--success); }
+.note { font-size: 13px; color: var(--muted); margin: 0; line-height: 1.55; }
+
+/* result */
+section.blk { display: flex; flex-direction: column; gap: 12px; padding-block: 20px; }
+section.blk + section.blk { border-top: 1px solid var(--hair); }
+.sechead { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.status { font-size: 12px; display: inline-flex; align-items: center; gap: 8px; color: var(--muted); }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--success); flex: none; box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.15); }
+.status.bad { color: var(--error-text); }
+.status.bad .dot { background: var(--error); box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.18); }
+.stats { background: var(--card); border: 1px solid var(--hair); border-radius: 11.2px; display: grid; grid-template-columns: 1fr 1fr; }
+.stat { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 16px 18px; }
+.stat + .stat { border-left: 1px solid var(--hair); }
+.stat .k { font: 500 11px/1.55 var(--font-mono); letter-spacing: 1.1px; color: var(--muted); text-transform: uppercase; }
+.stat .k sub { text-transform: none; }
+.stat .v { font: 600 46px/1 var(--font-display); letter-spacing: -1.6px; font-variant-numeric: tabular-nums; }
+.stat .v small { font: 400 14.4px var(--font-sans); color: var(--muted); letter-spacing: 0; margin-left: 4px; }
+.substats { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--hair); }
+.substats > div { padding: 10px 18px 12px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.substats > div + div { border-left: 1px solid var(--hair); }
+.substats .k { font: 400 12px/1.5 var(--font-sans); color: var(--muted); }
+.substats .v { font: 500 15.2px/1.3 var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.substats .v small { font-size: 11px; color: var(--muted); margin-left: 3px; }
+.flag { font-size: 13px; margin: 0; padding: 10px 14px; border-radius: 8px; border: 1px solid rgba(245, 158, 11, 0.35); color: var(--ink); line-height: 1.55; }
+.flag b { color: var(--warning); font-weight: 500; }
+
+/* form */
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+label.f, div.f { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted); min-width: 0; }
+input[type="number"], input[type="text"], select {
+  height: 40px; font: 400 13px var(--font-mono); color: var(--ink); background: var(--canvas);
+  border: 1px solid var(--hair); border-radius: 8px; padding: 0 12px; width: 100%; min-width: 0;
+}
+select { font-family: var(--font-sans); padding: 0 10px; }
+input[type="number"]:hover, input[type="text"]:hover, select:hover { border-color: var(--hair-hi); }
+input[type="range"] { width: 100%; accent-color: var(--ink); height: 40px; }
+input[type="checkbox"] { accent-color: var(--success); width: 16px; height: 16px; flex: none; margin: 0; }
+.chkline { display: flex; align-items: flex-start; gap: 10px; font-size: 13.6px; color: var(--ink); line-height: 1.5; cursor: pointer; }
+.chkline input { margin-top: 3px; }
+.chkline small { display: block; color: var(--muted); font-size: 12px; }
+.btn { height: 40px; padding: 0 22px; border-radius: 9999px; font: 500 14.4px/1 var(--font-sans); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap; text-decoration: none; transition: background 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), color 0.25s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.btn.primary { background: var(--ink-pure); color: var(--on-primary); border: 1px solid var(--ink-pure); font-weight: 600; }
+.btn.primary:hover { background: transparent; color: var(--ink); }
+.btn.primary:disabled { opacity: 0.5; cursor: progress; }
+.btn.secondary { background: transparent; color: var(--ink); border: 1px solid var(--ink); font-weight: 600; }
+.btn.secondary:hover { background: var(--card); }
+.btn.sm { height: 34px; padding: 0 16px; font-size: 13px; }
+.btn.ghost { background: transparent; color: var(--muted); border: 1px solid transparent; font-weight: 450; }
+.btn.ghost:hover { background: var(--hover); color: var(--ink); }
+.btnrow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.pills { display: flex; gap: 6px; flex-wrap: wrap; }
+.pill-f { height: 32px; padding: 0 14px; border-radius: 9999px; border: 1px solid var(--hair); background: transparent; color: var(--muted); font: 400 13px var(--font-sans); cursor: pointer; }
+.pill-f:hover { color: var(--ink); border-color: var(--hair-hi); }
+.pill-f[aria-pressed="true"] { background: var(--card); color: var(--ink); border-color: var(--hair-hi); }
+:focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; }
+
+/* wave check card */
+.card { background: var(--card); border: 1px solid var(--hair); border-radius: 11.2px; padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+.prog { font: 400 11px/1.55 var(--font-mono); letter-spacing: 0.44px; color: var(--muted); }
+.sum { display: flex; flex-direction: column; gap: 8px; padding-top: 14px; border-top: 1px solid var(--hair); }
+.sumhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.sumhead b { font: 600 14.4px/1.25 var(--font-display); }
+.badge { height: 22px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border-radius: 9999px; border: 1px solid var(--hair); font: 400 11px/1 var(--font-mono); letter-spacing: 0.44px; white-space: nowrap; }
+.badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.badge.over { color: var(--error-text); border-color: rgba(220, 38, 38, 0.4); }
+.badge.ok { color: var(--success); border-color: rgba(34, 197, 94, 0.35); }
+.badge.na { color: var(--muted); }
+.bar { display: flex; height: 6px; border-radius: 9999px; overflow: hidden; background: var(--hover); }
+.bar i { display: block; height: 100%; }
+.bar i.ok { background: var(--success); } .bar i.near { background: var(--warning); } .bar i.over { background: var(--error); } .bar i.na { background: #3a3a3a; }
+.sumline { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; font-size: 13px; }
+.sumline span:nth-child(odd) { color: var(--muted); }
+.sumline span:nth-child(even) { font-family: var(--font-mono); font-size: 12.5px; text-align: right; font-variant-numeric: tabular-nums; }
+.runs { display: flex; flex-direction: column; }
+.run { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 9px 10px; margin: 0 -10px; border-radius: 8px; border: 0; background: none; color: inherit; text-align: left; font: inherit; cursor: pointer; }
+.run:hover { background: var(--hover); }
+.run .t { font-size: 13.6px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.run .h { font: 500 13px var(--font-mono); color: var(--error-text); text-align: right; font-variant-numeric: tabular-nums; }
+.run .s { grid-column: 1 / -1; font: 400 11px/1.55 var(--font-mono); letter-spacing: 0.2px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* accordions */
+details.acc { border-top: 1px solid var(--hair); }
+details.acc > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 12px; padding: 14px 0; border-radius: 8px; }
+details.acc > summary::-webkit-details-marker { display: none; }
+details.acc > summary::before { content: ""; width: 7px; height: 7px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(-45deg); transition: transform 0.2s; flex: none; margin-left: 2px; }
+details.acc[open] > summary::before { transform: rotate(45deg); }
+.acc-t { font: 500 14.4px/1.3 var(--font-display); letter-spacing: -0.2px; }
+.acc-v { margin-left: auto; font: 400 11px/1.55 var(--font-mono); letter-spacing: 0.44px; color: var(--muted); text-align: right; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
+details.acc > summary:hover .acc-t { color: var(--ink-pure); }
+.acc-b { display: flex; flex-direction: column; gap: 12px; padding: 2px 0 20px; }
+dl.kv { margin: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; font-size: 13px; }
+dl.kv dt, dl.kv dd { padding: 7px 0; border-bottom: 1px solid var(--hair); }
+dl.kv dt { color: var(--muted); min-width: 0; }
+dl.kv dd { margin: 0; font-family: var(--font-mono); font-size: 12.5px; text-align: right; font-variant-numeric: tabular-nums; padding-left: 12px; }
+dl.kv > :nth-last-child(-n+2) { border-bottom: 0; }
+.seg { display: flex; gap: 6px; flex-wrap: wrap; }
+.seg button { flex: 1; height: 34px; border-radius: 9999px; border: 1px solid var(--hair); background: transparent; color: var(--muted); font: 400 13px var(--font-sans); cursor: pointer; padding: 0 10px; white-space: nowrap; }
+.seg button:hover { color: var(--ink); border-color: var(--hair-hi); }
+.seg button[aria-pressed="true"] { background: var(--card); color: var(--ink); border-color: var(--hair-hi); }
+.rose { display: flex; justify-content: center; }
+.rose svg { width: 100%; max-width: 320px; height: auto; display: block; }
+.rlegend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); }
+.rlegend span { display: inline-flex; align-items: center; gap: 6px; }
+.rlegend em, .legend em { font-style: normal; }
+.rlegend i { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+.tblwrap { overflow-x: auto; border: 1px solid var(--hair); border-radius: 8px; }
+table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+th, td { padding: 8px 10px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--hair); }
+th { font: 500 10px/1.55 var(--font-mono); letter-spacing: 0.5px; text-transform: uppercase; color: var(--muted); background: var(--raised); position: sticky; top: 0; }
+th sub { text-transform: none; }
+td { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+th:first-child, td:first-child { text-align: left; }
+td:first-child { font-family: var(--font-sans); }
+tr.sel td { background: var(--card); color: var(--ink-pure); }
+tbody tr:last-child td { border-bottom: 0; }
+.radtbl { max-height: 300px; overflow-y: auto; }
+.radtbl td:first-child { font-family: var(--font-mono); }
+.layer-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.layer-list li { display: flex; align-items: center; gap: 10px; font-size: 13.6px; min-width: 0; flex-wrap: wrap; }
+.layer-list li .nm { flex: 1; min-width: 0; }
+.layer-list li .ct { font: 400 11px var(--font-mono); color: var(--muted); }
+.sw-bnd { width: 18px; height: 0; border-top: 2px dashed var(--ink); flex: none; }
+.sw-pv { width: 14px; height: 10px; border: 1.5px solid var(--ink); background: var(--map-pv); border-radius: 2px; flex: none; }
+.method p { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.6; max-width: 65ch; }
+.method b { color: var(--ink); font-weight: 500; }
+.method code { font: 400 12px var(--font-mono); color: var(--ink); }
+.copyrow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.copied { font-size: 12px; color: var(--muted); }
+textarea.fallback { width: 100%; height: 90px; font: 400 11px var(--font-mono); border-radius: 8px; border: 1px solid var(--hair); background: var(--canvas); color: var(--ink); }
+@media (max-width: 420px) { .stat .v { font-size: 38px; } .row { grid-template-columns: 1fr; } .substats { grid-template-columns: 1fr 1fr; } .substats > div:nth-child(3) { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--hair); } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="app" id="app" data-panel="normal">
+  <header class="top">
+    <div class="brand">
+      <span class="mark" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M1.5 11.5c1.6 0 1.6-1.6 3.2-1.6s1.6 1.6 3.2 1.6 1.6-1.6 3.2-1.6 1.6 1.6 3.2 1.6 1.6-1.6 2.2-1.6" stroke="#FAFAFA" stroke-width="1.5" stroke-linecap="round"/><path d="M1.5 15c1.6 0 1.6-1.6 3.2-1.6S6.3 15 7.9 15s1.6-1.6 3.2-1.6 1.6 1.6 3.2 1.6 1.6-1.6 2.2-1.6" stroke="#A1A1A1" stroke-width="1.5" stroke-linecap="round"/><rect x="4" y="2.5" width="10" height="4.5" rx="1" stroke="#22C55E" stroke-width="1.5"/></svg></span>
+      <div><h1>FPV Wave Estimator</h1><p>Fetch · Hs · Hmax · USBR DS-13 / CEM</p></div>
+    </div>
+    <nav class="tabs" id="resTabs" role="tablist" aria-label="อ่างเก็บน้ำ"></nav>
+  </header>
+  <main class="split">
+    <div class="mapwrap" id="mapwrap">
+      <canvas id="map" aria-label="แผนที่อ่างเก็บน้ำบนกริด UTM คลิกบนผิวน้ำเพื่อเลือกจุด"></canvas>
+      <div class="mapbar">
+        <button class="chip" id="zoomSite">ซูมไปที่จุด</button>
+        <button class="chip" id="zoomPrj">ซูมไปที่โครงการ</button>
+        <button class="chip" id="capBtn" title="คัดลอกภาพแผนที่ไปที่ Clipboard"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 5.5A1.5 1.5 0 0 1 3.5 4h1.6l1-1.5h3.8l1 1.5h1.6A1.5 1.5 0 0 1 14 5.5v6A1.5 1.5 0 0 1 12.5 13h-9A1.5 1.5 0 0 1 2 11.5z" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8.3" r="2.4" stroke="currentColor" stroke-width="1.3"/></svg>Capture</button>
+        <span class="grp" id="baseCtl" hidden>
+          <button class="chip" id="baseToggle" aria-pressed="false" title="เปิด/ปิดภาพดาวเทียมออนไลน์"><span class="sw"></span>ภาพดาวเทียม</button>
+          <select class="chip" id="baseSrc" aria-label="แหล่งภาพพื้นหลัง">
+            <option value="esri">Esri</option>
+            <option value="google">Google</option>
+            <option value="s2">Sentinel-2</option>
+            <option value="topo">ภูมิประเทศ</option>
+          </select>
+          <button class="chip" id="lblToggle" aria-pressed="false" title="แสดงชื่อสถานที่"><span class="sw"></span>ชื่อสถานที่</button>
+        </span>
+      </div>
+      <div class="hint" id="hint">คลิกบนผิวน้ำเพื่อเลือกจุด · ลากเพื่อเลื่อน · scroll/pinch เพื่อซูม</div>
+      <div class="legend" id="legend" hidden>
+        <span><i class="lg ok"></i>ไม่เกิน 90%</span>
+        <span><i class="lg near"></i>90–100%</span>
+        <span><i class="lg over"></i>เกินค่าที่รับได้</span>
+        <span><i class="lg na"></i>บนบก / ไม่มีทิศรับลม</span>
+      </div>
+      <div class="mini" id="mini" hidden>
+        <div class="mini-h"><span class="eyebrow" id="miniName">—</span><button class="iconbtn" id="pRestore" aria-label="เปิดแผงคำนวณ" title="เปิดแผงคำนวณ"><svg viewBox="0 0 16 16" fill="none"><path d="M10 3H13V6M6 13H3V10M13 3 9 7M3 13l4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>
+        <div class="mini-n">
+          <span class="k">Hs</span><span class="k" id="miniHdK">Hmax</span>
+          <span class="v" id="miniHs">—</span><span class="v" id="miniHd">—</span>
+        </div>
+        <span class="meta" id="miniMeta">—</span>
+      </div>
+      <div class="pop" id="pop" hidden role="dialog" aria-label="ผลตรวจที่ช่วงนี้"></div>
+      <div class="toast" id="toast" hidden></div>
+      <div class="zoom">
+        <button class="chip" id="zin" aria-label="ซูมเข้า">+</button>
+        <button class="chip" id="zout" aria-label="ซูมออก">−</button>
+        <button class="chip" id="zfit" aria-label="ดูทั้งอ่าง">⤢</button>
+      </div>
+      <div class="readout" id="readout">UTM 47N</div>
+      <div class="attrib" id="attrib">Shoreline: Hydro_aw.kmz</div>
+    </div>
+
+    <div class="resizer" id="resizer" role="separator" aria-orientation="vertical" aria-label="ลากเพื่อปรับความกว้างแผง" tabindex="0"></div>
+    <aside class="panel" id="panel" aria-label="แผงคำนวณ">
+      <div class="phead">
+        <span class="eyebrow">แผงคำนวณ</span>
+        <button class="btn secondary sm" id="reportBtn">สร้างรายงาน</button>
+        <button class="iconbtn" id="pMax" aria-label="ขยายแผงเต็ม" title="ขยายแผง (แสดงทุกหัวข้อ)"><svg viewBox="0 0 16 16" fill="none"><path d="M10 2.5h3.5V6M6 13.5H2.5V10M13.5 2.5 9 7M2.5 13.5 7 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <button class="iconbtn" id="pMin" aria-label="ย่อแผง" title="ย่อแผง (ดูแผนที่เต็มจอ)"><svg viewBox="0 0 16 16" fill="none"><path d="M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+      </div>
+      <div class="panel-inner">
+        <div class="col col-a">
+          <section class="blk" aria-labelledby="resName">
+            <div class="sechead">
+              <p class="eyebrow">ผลคำนวณ ที่จุดพิจารณา</p>
+              <span class="status" id="ptStatus"><span class="dot"></span><span>—</span></span>
+            </div>
+            <h2 class="title" id="resName">—</h2>
+            <div class="stats">
+              <div class="stat"><span class="k">Significant, H<sub>s</sub></span><span class="v" id="oHs">—</span></div>
+              <div class="stat"><span class="k" id="oHdLbl">Maximum, H<sub>max</sub></span><span class="v" id="oHd">—</span></div>
+              <div class="substats">
+                <div><span class="k">Fetch, F<sub>eff</sub></span><span class="v" id="oFv">—</span></div>
+                <div><span class="k">ลมพัดมาจาก</span><span class="v" id="oDirS">—</span></div>
+                <div><span class="k">Peak period, T<sub>p</sub></span><span class="v" id="oT">—</span></div>
+              </div>
+            </div>
+            <p class="flag" id="sectorFlag" hidden></p>
+          </section>
+
+          <section class="blk" aria-labelledby="h-chk">
+            <div class="card" id="chkCard">
+              <div class="cardhead">
+                <h2 class="title" id="h-chk">ความสามารถรับคลื่นของ PV Array และ Project Boundary</h2>
+                <div class="cardbtns">
+                  <button class="iconbtn" id="cMin" aria-label="ย่อกล่อง" title="ย่อกล่อง"><svg viewBox="0 0 16 16" fill="none"><path d="M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+                  <button class="iconbtn" id="cMax" aria-label="ขยายกล่อง" title="ขยายกล่อง (ซ่อนหัวข้ออื่น)"><svg viewBox="0 0 16 16" fill="none"><path d="M10 2.5h3.5V6M6 13.5H2.5V10M13.5 2.5 9 7M2.5 13.5 7 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                </div>
+              </div>
+              <div class="sechead"><span class="tag" id="chkPrj">—</span><span class="tag" id="chkMiniSum">ยังไม่ได้คำนวณ</span></div>
+              <div class="cbody" id="chkBody">
+              <div class="row">
+                <label class="f"><span>PV Array · H<sub>s</sub> ที่รับได้ (m)</span><input type="number" id="allowPV" step="0.05" min="0" value="1.20"></label>
+                <label class="f"><span>Boundary · H<sub>s</sub> ที่รับได้ (m)</span><input type="number" id="allowBnd" step="0.05" min="0" value="1.20"></label>
+              </div>
+              <div class="row">
+                <label class="f"><span>ระยะแบ่งช่วงตรวจ</span>
+                  <select id="chkStep">
+                    <option value="1">ทุก 1 m</option>
+                    <option value="5">ทุก 5 m</option>
+                    <option value="10" selected>ทุก 10 m</option>
+                    <option value="25">ทุก 25 m</option>
+                    <option value="50">ทุก 50 m</option>
+                    <option value="100">ทุก 100 m</option>
+                  </select>
+                </label>
+                <div class="f"><span>ทิศลมที่ใช้</span><span class="mono" id="chkModeLbl" style="height:40px;display:flex;align-items:center;color:var(--ink);font-size:13px">สูงสุดทุกทิศ</span></div>
+              </div>
+              <label class="chkline"><input type="checkbox" id="chkShelter" checked><span>แพ PV บังคลื่น<small>รัศมี fetch หยุดที่ขอบแพที่ขวางอยู่ ใช้กับทั้งจุดพิจารณาและการตรวจ</small></span></label>
+              <label class="chkline"><input type="checkbox" id="chkExposed" checked><span>นับเฉพาะลมที่พัดเข้าด้านนอกของขอบ<small>ด้านในของแพหรือกรอบไม่นับเป็นด้านรับคลื่น</small></span></label>
+              <div class="btnrow">
+                <button class="btn primary" id="chkRun">Compute</button>
+                <button class="btn secondary" id="chkClear">Clear</button>
+                <span class="prog" id="chkProg" aria-live="polite"></span>
+              </div>
+              <p class="flag" id="chkStale" hidden><b>ผลบนแผนที่เป็นของรอบก่อน</b> ค่าลม ทิศ หรือตัวเลือกเปลี่ยนไปแล้ว กด Compute เพื่อคำนวณใหม่</p>
+              <div id="chkOut" hidden></div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div class="col col-b">
+          <details class="acc" data-acc="dir">
+            <summary><span class="acc-t">ทิศลมและ Fetch rose</span><span class="acc-v" id="vDir">—</span></summary>
+            <div class="acc-b">
+              <div class="seg" role="group" aria-label="โหมดเลือกทิศ">
+                <button data-mode="all" aria-pressed="true">สูงสุดทุกทิศ</button>
+                <button data-mode="sector" aria-pressed="false">สูงสุดในช่วงทิศ</button>
+                <button data-mode="fixed" aria-pressed="false">กำหนดทิศ</button>
+              </div>
+              <div class="row" id="sectorRow" hidden>
+                <label class="f">จากทิศ (°)<input type="number" id="secA" min="0" max="357" step="3" value="0"></label>
+                <label class="f">ถึงทิศ (°)<input type="number" id="secB" min="0" max="357" step="3" value="357"></label>
+              </div>
+              <div class="row" id="fixedRow" hidden>
+                <label class="f">ทิศลม (°) คลิกบน rose ได้<input type="number" id="fixDir" min="0" max="357" step="3" value="0"></label>
+              </div>
+              <div class="rose" id="rose"></div>
+              <div class="rlegend" id="roseLegend"></div>
+              <p class="note">ความยาวกลีบ = F<sub>eff</sub> ของแต่ละทิศ (เฉลี่ย 9 รัศมี) สีบอก H<sub>s</sub> ที่ทิศนั้นเทียบกับ H<sub>s</sub> ที่รับได้ของ PV Array · เส้นเทาจาง = รัศมีเดี่ยว · วงประ = fetch ที่ทำให้ H<sub>s</sub> เท่าค่าที่รับได้ · ในโหมด "กำหนดทิศ" คลิกบน rose เพื่อเลือกทิศได้</p>
+            </div>
+          </details>
+
+          <details class="acc" data-acc="wind">
+            <summary><span class="acc-t">ลมและเกณฑ์</span><span class="acc-v" id="vWind">—</span></summary>
+            <div class="acc-b">
+              <div class="row">
+                <label class="f">ลมกระโชก 3 วินาที (km/h)<input type="number" id="gust" step="1" value="150"></label>
+                <label class="f"><span>Gust factor (U<sub>3s</sub>/U<sub>1h</sub>)</span><input type="number" id="gf" step="0.01" value="1.53"></label>
+              </div>
+              <div class="row">
+                <label class="f"><span>Over-water factor R<sub>L</sub></span><input type="number" id="rl" step="0.01" value="1.00"></label>
+                <label class="f">ความลึกน้ำที่จุด (m)<input type="number" id="depth" step="0.5" placeholder="ไม่บังคับ"></label>
+              </div>
+              <div class="row">
+                <label class="f">วิธีหา fetch
+                  <select id="fmethod">
+                    <option value="9">เฉลี่ย 9 รัศมี @3° (USBR/CEM)</option>
+                    <option value="1">รัศมีเดี่ยว</option>
+                  </select>
+                </label>
+                <label class="f">ความสูงคลื่นออกแบบ
+                  <select id="hp">
+                    <option value="0.004">Hmax = H1 = 1.67 Hs (Table B-2)</option>
+                    <option value="0.01">1.52 Hs (คลื่นเกิน 1%, Rayleigh)</option>
+                    <option value="0.02">H5 = 1.40 Hs (Table B-2)</option>
+                    <option value="0.04">H10 = 1.27 Hs (Table B-2)</option>
+                  </select>
+                </label>
+              </div>
+              <p class="note" id="gustNote"></p>
+            </div>
+          </details>
+
+          <details class="acc" data-acc="detail">
+            <summary><span class="acc-t">รายละเอียดผลคำนวณ</span><span class="acc-v" id="vDetail">—</span></summary>
+            <div class="acc-b">
+              <dl class="kv">
+                <dt>วิธีหา fetch</dt><dd id="oF">—</dd>
+                <dt>ทิศลม (ลมพัดมาจาก)</dt><dd id="oDir">—</dd>
+                <dt>Deep-water length, L<sub>0</sub></dt><dd id="oL">—</dd>
+                <dt>Minimum duration, t<sub>min</sub></dt><dd id="oTmin">—</dd>
+                <dt>ลมเฉลี่ย 1 ชม., U<sub>1h</sub></dt><dd id="oU1">—</dd>
+                <dt>ลมเฉลี่ยช่วง t<sub>min</sub>, U<sub>t</sub></dt><dd id="oUt">—</dd>
+                <dt>Deep-water check</dt><dd id="oDeep">—</dd>
+              </dl>
+            </div>
+          </details>
+
+          <details class="acc" data-acc="pt">
+            <summary><span class="acc-t">จุดพิจารณา</span><span class="acc-v" id="vPt">—</span></summary>
+            <div class="acc-b">
+              <span class="tag" id="zoneTag">UTM ZONE 47N · WGS84 (m)</span>
+              <div class="row">
+                <label class="f">Easting (E)<input type="text" id="ptE" inputmode="decimal"></label>
+                <label class="f">Northing (N)<input type="text" id="ptN" inputmode="decimal"></label>
+              </div>
+              <div class="row">
+                <label class="f">Latitude<input type="text" id="lat" inputmode="decimal"></label>
+                <label class="f">Longitude<input type="text" id="lon" inputmode="decimal"></label>
+              </div>
+              <div class="btnrow">
+                <button class="btn secondary sm" id="goPt">ใช้พิกัดนี้</button>
+                <a class="btn ghost sm" id="gmaps" href="https://www.google.com/maps" target="_blank" rel="noopener">ดูใน Google Maps ↗</a>
+              </div>
+              <div id="presetBox" hidden>
+                <div class="f" style="gap:8px"><span>จุดอ้างอิงจากไฟล์ Excel</span><div class="pills" id="presetGrp"></div></div>
+              </div>
+            </div>
+          </details>
+
+          <details class="acc" data-acc="cmp">
+            <summary><span class="acc-t">เทียบวิธี</span><span class="acc-v" id="vCmp">—</span></summary>
+            <div class="acc-b">
+              <div class="tblwrap">
+                <table>
+                  <thead><tr><th>วิธี</th><th>F (km)</th><th>Hs (m)</th><th>H<sub>d</sub> (m)</th><th>T (s)</th><th>t<sub>min</sub> (h)</th></tr></thead>
+                  <tbody id="cmpBody"></tbody>
+                </table>
+              </div>
+              <p class="note">SPM 1984 คือฐานของ USBR ACER Tech. Memo No. 2 (วิธีเดิมก่อน DS-13) ใช้ U<sub>A</sub> = 0.71U<sup>1.23</sup> จึงได้คลื่นสูงกว่าประมาณ 30%</p>
+            </div>
+          </details>
+
+          <details class="acc" data-acc="layers">
+            <summary><span class="acc-t">เลเยอร์และภาพพื้นหลัง</span><span class="acc-v" id="vLay">—</span></summary>
+            <div class="acc-b">
+              <ul class="layer-list" id="prjList"></ul>
+              <p class="note" id="prjNote" hidden></p>
+              <div id="baseCard" hidden>
+                <div class="row">
+                  <label class="f">แหล่งภาพ
+                    <select id="baseSrc2">
+                      <option value="esri">ดาวเทียม Esri World Imagery</option>
+                      <option value="google">ดาวเทียม Google (ใช้ API key)</option>
+                      <option value="s2">Sentinel-2 cloudless 2016</option>
+                      <option value="topo">แผนที่ภูมิประเทศ Esri</option>
+                    </select>
+                  </label>
+                  <label class="f">ความทึบของภาพ<input type="range" id="baseOpacity" min="0.2" max="1" step="0.05" value="1"></label>
+                </div>
+                <div id="gkeyRow" hidden>
+                  <div class="row" style="margin-top:12px">
+                    <label class="f">Google Maps API key<input type="text" id="gkey" autocomplete="off" spellcheck="false" placeholder="AIza…"></label>
+                    <div class="f" style="justify-content:flex-end"><button class="btn secondary sm" id="gkeySave">ใช้ key นี้</button></div>
+                  </div>
+                  <label class="chkline" style="margin-top:10px"><input type="checkbox" id="gkeyRemember" checked><span>จำ key ไว้ในเบราว์เซอร์เครื่องนี้</span></label>
+                </div>
+                <p class="note" style="margin-top:10px"><span id="baseStatus"></span> · Esri World Imagery ละเอียดราว 0.3–1 m · การใช้ภาพต้องเป็นไปตามเงื่อนไขของผู้ให้บริการ</p>
+              </div>
+              <p class="note" id="sandboxNote">หน้านี้เปิดอยู่ในกรอบที่ไม่อนุญาตให้โหลดภาพจากเซิร์ฟเวอร์ภายนอก จึงแสดงภาพดาวเทียมไม่ได้ ถ้าเปิดไฟล์ FPV_Wave_Estimator.html จากเครื่องโดยตรง ภาพดาวเทียมจะเปิดได้</p>
+            </div>
+          </details>
+
+          <details class="acc" data-acc="rad">
+            <summary><span class="acc-t">ตารางรัศมีทุกทิศ</span><span class="acc-v">120 ทิศ · คัดลอกไป Excel ได้</span></summary>
+            <div class="acc-b">
+              <div class="copyrow"><button class="btn secondary sm" id="copyTsv">คัดลอกตาราง (TSV)</button><span class="copied" id="copied"></span></div>
+              <textarea class="fallback" id="tsvFallback" hidden readonly></textarea>
+              <div class="tblwrap radtbl">
+                <table>
+                  <thead><tr><th>ทิศ (°)</th><th>รัศมี (km)</th><th>F<sub>eff</sub> (km)</th><th>Hs (m)</th><th>T (s)</th></tr></thead>
+                  <tbody id="radBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </details>
+
+          <details class="acc" data-acc="method">
+            <summary><span class="acc-t">วิธีคำนวณและการตรวจข้อมูล</span><span class="acc-v">DS-13 · CEM</span></summary>
+            <div class="acc-b method">
+              <ol class="steps">
+                <li><b>ขอบอ่าง</b> ใช้เส้นขอบผิวน้ำจากไฟล์ Hydro_aw.kmz (ไฟล์ไม่ระบุระดับน้ำ) คำนวณระยะบนพิกัด UTM ของแต่ละอ่าง</li>
+                <li><b>Fetch</b> จากจุดที่เลือก ลากเส้นตรงออกไปรอบตัวทุก 3° รวม 120 เส้น จนชนฝั่งหรือเกาะ แล้วเฉลี่ยความยาว 9 เส้นที่อยู่ติดกัน (กว้าง ±12°) ใช้เป็น fetch ของทิศตรงกลาง ตาม DS-13 ข้อ B.1</li>
+                <li><b>แพ PV บังคลื่น</b> ถ้าเปิดไว้ เส้นจะหยุดที่ขอบแพที่ขวางอยู่ เหมือนแพเป็นฝั่ง (จุดที่อยู่บนแพไม่นับแพของตัวเอง)</li>
+                <li><b>ลม</b> แปลงลมกระโชก 3 วินาทีเป็นลมเฉลี่ย 1 ชั่วโมง U<sub>1h</sub> = U<sub>3s</sub> ÷ GF × R<sub>L</sub> แล้วหาเวลาที่ลมต้องพัดจนคลื่นโตเต็มที่ (t<sub>min</sub>, DS-13 Eq.1) และปรับความเร็วลมเป็นค่าเฉลี่ยในช่วงเวลานั้นด้วยกราฟ duration ของ CEM (วนคำนวณจนค่าคงที่)</li>
+                <li><b>คลื่น</b> H<sub>s</sub> จาก DS-13 Eq.2 และ T<sub>p</sub> จาก Eq.3 ในทิศที่ให้ fetch ยาวที่สุดตามโหมดทิศที่เลือก</li>
+                <li><b>H<sub>max</sub></b> = 1.67 H<sub>s</sub> คือความสูงเฉลี่ยของคลื่น 1% ที่สูงที่สุด (มีคลื่นสูงกว่าค่านี้ราว 0.4%) ตาม DS-13 Table B-2</li>
+                <li><b>ตรวจตามแนวขอบ</b> แบ่งเส้นรอบรูปของ Project Boundary และแพแต่ละแพเป็นช่วงตามระยะที่เลือก ทำข้อ 2–5 ที่กึ่งกลางทุกช่วง โดยนับเฉพาะลมที่พัดเข้าหาด้านนอก (ถ้าเลือก) แล้วเทียบ H<sub>s</sub> กับค่าที่รับได้: เขียว &lt; 90%, ส้ม 90–100%, แดงเกิน · ช่วงที่กึ่งกลางอยู่บนบกจะไม่ตรวจ</li>
+              </ol>
+              <p><b>สมการ DS-13 (F เป็น mile, V เป็น mph, H เป็น ft):</b> <code>tmin = 1.87·F^0.67 / V^0.34</code> (ชม.) · <code>Hs = 0.0245·F^0.5·V·(1.1+0.0156V)^0.5</code> · <code>T = 0.464·F^(1/3)·V^(1/3)·(1.1+0.0156V)^(1/6)</code> · <code>L0 = gT²/2π</code> · ปรับช่วงเวลาลม (CEM): <code>Ut/U3600 = 1.277 + 0.296·tanh(0.9·log(45/t))</code> เมื่อ t &lt; 1 ชม. และ <code>−0.15·log t + 1.5334</code> เมื่อ t ≥ 1 ชม.</p>
+              <p><b>ข้อจำกัด:</b> ใช้ได้กับน้ำลึก (ความลึก &gt; L<sub>0</sub>/2) ไม่รวมการหักเห การเลี้ยวเบน การสะท้อน และคลื่นที่ลอดใต้แพ ผลขึ้นกับระดับน้ำของเส้นขอบอ่าง ถ้ามีเส้นขอบที่ระดับน้ำออกแบบ ควรใช้เส้นนั้นแทน</p>
+              <p><b>ตรวจข้อมูลแต่ละอ่าง</b> (แถวที่เน้นคืออ่างที่เปิดอยู่)</p>
+              <div class="tblwrap"><table class="vtbl">
+                <thead><tr><th>อ่าง</th><th>UTM</th><th>พื้นที่ไฟล์ (km²)</th><th>อ้างอิง (km²)</th><th>ต่าง</th><th>เขื่อนถึงขอบน้ำ</th><th>ลมตั้งต้น</th></tr></thead>
+                <tbody id="verBody"></tbody>
+              </table></div>
+              <p id="verNote"></p>
+              <p><b>อ้างอิง:</b> U.S. Bureau of Reclamation, Design Standards No. 13: Embankment Dams, Chapter 6: Freeboard, Phase 4 (Final), September 2012, Appendix B · USACE EM 1110-2-1100 Coastal Engineering Manual, Part II-2 · Shore Protection Manual (1984) · พื้นที่อ่างอ้างอิง: EGAT (ศรีนครินทร์ 419, อุบลรัตน์ 388) และ Wikipedia (ภูมิพล 300, วชิราลงกรณ 388, สิรินธร 288)</p>
+            </div>
+          </details>
+        </div>
+      </div>
+    </aside>
+  </main>
+  <div class="modal" id="repModal" hidden role="dialog" aria-label="รายงาน">
+    <div class="modal-bar">
+      <div class="modal-t"><span class="eyebrow">รายงาน</span><span class="note" id="repNote">แก้ข้อความในรายงานได้โดยคลิกที่ตัวหนังสือ</span></div>
+      <div class="btnrow">
+        <button class="btn secondary sm" id="repCopy">คัดลอกรายงาน</button>
+        <button class="btn secondary sm" id="repPrint" hidden>พิมพ์ / บันทึก PDF</button>
+        <button class="btn secondary sm" id="repSave" hidden>ดาวน์โหลด HTML</button>
+        <button class="btn primary sm" id="repClose">ปิด</button>
+      </div>
+    </div>
+    <iframe id="repFrame" title="รายงาน"></iframe>
+  </div>
+  <div class="modal" id="capModal" hidden role="dialog" aria-label="ภาพแผนที่">
+    <div class="modal-bar">
+      <div class="modal-t"><span class="eyebrow">ภาพแผนที่</span><span class="note" id="capNote"></span></div>
+      <div class="btnrow"><a class="btn secondary sm" id="capSave" hidden download="map.png">บันทึกเป็น PNG</a><button class="btn primary sm" id="capClose">ปิด</button></div>
+    </div>
+    <div class="capwrap"><img id="capImg" alt="ภาพแผนที่ที่จับไว้"></div>
+  </div>
+</div>
