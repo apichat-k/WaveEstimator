@@ -169,6 +169,57 @@ select.chip { padding: 0 10px; width: auto; }
 .lg { width: 16px; height: 4px; border-radius: 2px; flex: none; }
 .lg.ok { background: var(--success); } .lg.near { background: var(--warning); } .lg.over { background: var(--error); }
 .lg.na { background: repeating-linear-gradient(90deg, var(--muted) 0 3px, transparent 3px 6px); }
+.lg.base { background: rgba(161, 161, 161, 0.55); }
+.legend em { color: var(--ink); }
+
+/* measure tool card (sits on its own row under the map chips) */
+.mapbar > .mrow { flex-basis: 100%; pointer-events: none; display: flex; }
+.meas {
+  pointer-events: auto; width: 312px; max-width: 100%; margin-top: 2px; background: var(--card); border-radius: 11.2px; box-shadow: var(--shadow);
+  padding: 12px 14px 12px; display: flex; flex-direction: column; gap: 8px;
+}
+.meas-h { display: flex; align-items: center; gap: 6px; }
+.meas-h .seg { flex: 1; }
+.seg.sm button { height: 30px; font-size: 12.5px; padding: 0 8px; }
+.meas-n { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.meas-n .k { font: 500 10px/1.55 var(--font-mono); letter-spacing: 0.5px; color: var(--muted); text-transform: uppercase; flex: none; }
+.meas-n .v { font: 600 22px/1.15 var(--font-display); letter-spacing: -0.5px; font-variant-numeric: tabular-nums; text-align: right; min-width: 0; overflow-wrap: anywhere; }
+.meas-n .v small { font: 400 12px var(--font-sans); color: var(--muted); letter-spacing: 0; margin-left: 3px; }
+.meas-sub, .meas-hint { margin: 0; font: 400 11px/1.5 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.meas-hint { color: var(--ink); font-family: var(--font-sans); font-size: 12px; }
+.meas-u { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.meas-u select { height: 32px; font-size: 12.5px; }
+.meas-u.one { grid-template-columns: 1fr; }
+.meas .btnrow { gap: 4px; }
+.meas .btn.sm { height: 30px; padding: 0 12px; font-size: 12.5px; }
+#measUnits { display: none; }
+@media (max-width: 900px) {
+  .app.measuring .mapwrap { height: 78vh; }
+  .meas { width: 100%; padding: 10px 12px; gap: 6px; }
+  .meas-sub { display: none; }
+  .meas-u { display: none; }
+  .meas.units .meas-u { display: grid; }
+  #measUnits { display: inline-flex; }
+  #measUnits[aria-pressed="true"] { background: var(--hover); color: var(--ink); }
+  .meas-n .v { font-size: 19px; }
+}
+#map.measuring { cursor: crosshair; }
+#map.onvert { cursor: grab; }
+
+/* wave breaker summary */
+.wbrow { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; }
+.wbrow .seg { flex: none; }
+.wbgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); border: 1px solid var(--hair); border-radius: 8px; overflow: hidden; }
+.wbk { padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; min-width: 0; box-shadow: -1px 0 0 var(--hair), 0 -1px 0 var(--hair); }
+.wbk .k { font: 500 10px/1.55 var(--font-mono); letter-spacing: 0.5px; color: var(--muted); text-transform: uppercase; }
+.wbk .v { font: 600 32px/1.05 var(--font-display); letter-spacing: -1px; font-variant-numeric: tabular-nums; }
+.wbk .v small { font: 400 14px var(--font-sans); color: var(--muted); letter-spacing: 0; margin-left: 2px; }
+.wbk .v.none { font: 500 15px/1.6 var(--font-sans); letter-spacing: 0; color: var(--success); }
+.wbk .s { font: 400 11px/1.5 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.nocase { text-transform: none; }
+.wbtbl td .sw { display: inline-block; width: 16px; height: 5px; border-radius: 2px; margin-right: 8px; vertical-align: middle; }
+.wbdef { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.wbdef select { height: 32px; font-size: 12.5px; width: auto; flex: 1; min-width: 0; }
 
 /* minimised panel → floating result card */
 .mini {
@@ -358,6 +409,50 @@ textarea.fallback { width: 100%; height: 90px; font: 400 11px var(--font-mono); 
           </select>
           <button class="chip" id="lblToggle" aria-pressed="false" title="แสดงชื่อสถานที่"><span class="sw"></span>ชื่อสถานที่</button>
         </span>
+        <button class="chip" id="measBtn" aria-pressed="false" title="วัดระยะทางและพื้นที่บนแผนที่"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M1.8 11.2 11.2 1.8l3 3-9.4 9.4z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M4.4 8.6l1.4 1.4M6.4 6.6l2 2M8.4 4.6l1.4 1.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>วัดระยะ</button>
+        <div class="mrow">
+          <div class="meas" id="meas" hidden role="region" aria-label="เครื่องมือวัดระยะ">
+            <div class="meas-h">
+              <div class="seg sm" id="measMode" role="group" aria-label="แบบการวัด">
+                <button data-m="line" aria-pressed="true">เส้นตรง</button>
+                <button data-m="path" aria-pressed="false">หลายเส้น</button>
+                <button data-m="poly" aria-pressed="false">พื้นที่</button>
+              </div>
+              <button class="iconbtn" id="measX" aria-label="ปิดเครื่องมือวัด" title="ปิดเครื่องมือวัด" style="width:30px;height:30px">×</button>
+            </div>
+            <div class="meas-n"><span class="k" id="measK">ระยะทาง</span><span class="v" id="measV">—</span></div>
+            <div class="meas-n" id="measAreaRow" hidden><span class="k">พื้นที่</span><span class="v" id="measA">—</span></div>
+            <div class="meas-sub" id="measSub"></div>
+            <div class="meas-u" id="measU">
+              <select id="measLU" aria-label="หน่วยความยาว">
+                <option value="auto">m / km อัตโนมัติ</option>
+                <option value="m">เมตร (m)</option>
+                <option value="km">กิโลเมตร (km)</option>
+                <option value="wa">วา</option>
+                <option value="ft">ฟุต (ft)</option>
+                <option value="mi">ไมล์ (mi)</option>
+                <option value="nmi">ไมล์ทะเล (NM)</option>
+              </select>
+              <select id="measAU" aria-label="หน่วยพื้นที่" hidden>
+                <option value="rngw">ไร่-งาน-ตร.วา</option>
+                <option value="rai">ไร่</option>
+                <option value="m2">ตารางเมตร (m²)</option>
+                <option value="ha">เฮกตาร์ (ha)</option>
+                <option value="km2">ตร.กม. (km²)</option>
+                <option value="ac">เอเคอร์ (acre)</option>
+              </select>
+            </div>
+            <div class="btnrow">
+              <button class="btn primary sm" id="measDone" hidden>จบ</button>
+              <button class="btn ghost sm" id="measUndo">ย้อนจุด</button>
+              <button class="btn ghost sm" id="measClear">ล้าง</button>
+              <button class="btn ghost sm" id="measCopy">คัดลอก</button>
+              <button class="btn ghost sm" id="measUnits" aria-pressed="false">หน่วย</button>
+            </div>
+            <textarea class="fallback" id="measFallback" hidden readonly aria-label="ข้อมูลการวัด"></textarea>
+            <p class="meas-hint" id="measHint">คลิกบนแผนที่เพื่อวางจุดแรก</p>
+          </div>
+        </div>
       </div>
       <div class="hint" id="hint">คลิกบนผิวน้ำเพื่อเลือกจุด · ลากเพื่อเลื่อน · scroll/pinch เพื่อซูม</div>
       <div class="legend" id="legend" hidden>
@@ -550,7 +645,7 @@ textarea.fallback { width: 100%; height: 90px; font: 400 11px var(--font-mono); 
             <div class="acc-b">
               <div class="tblwrap">
                 <table>
-                  <thead><tr><th>วิธี</th><th>F (km)</th><th>Hs (m)</th><th>H<sub>d</sub> (m)</th><th>T (s)</th><th>t<sub>min</sub> (h)</th></tr></thead>
+                  <thead><tr><th>วิธี</th><th>F <span class="nocase">(km)</span></th><th>Hs <span class="nocase">(m)</span></th><th>H<sub>d</sub> <span class="nocase">(m)</span></th><th>T <span class="nocase">(s)</span></th><th>t<sub>min</sub> <span class="nocase">(h)</span></th></tr></thead>
                   <tbody id="cmpBody"></tbody>
                 </table>
               </div>
@@ -595,7 +690,7 @@ textarea.fallback { width: 100%; height: 90px; font: 400 11px var(--font-mono); 
               <textarea class="fallback" id="tsvFallback" hidden readonly></textarea>
               <div class="tblwrap radtbl">
                 <table>
-                  <thead><tr><th>ทิศ (°)</th><th>รัศมี (km)</th><th>F<sub>eff</sub> (km)</th><th>Hs (m)</th><th>T (s)</th></tr></thead>
+                  <thead><tr><th>ทิศ <span class="nocase">(°)</span></th><th>รัศมี <span class="nocase">(km)</span></th><th>F<sub>eff</sub> <span class="nocase">(km)</span></th><th>Hs <span class="nocase">(m)</span></th><th>T <span class="nocase">(s)</span></th></tr></thead>
                   <tbody id="radBody"></tbody>
                 </table>
               </div>
@@ -613,12 +708,14 @@ textarea.fallback { width: 100%; height: 90px; font: 400 11px var(--font-mono); 
                 <li><b>คลื่น</b> H<sub>s</sub> จาก DS-13 Eq.2 และ T<sub>p</sub> จาก Eq.3 ในทิศที่ให้ fetch ยาวที่สุดตามโหมดทิศที่เลือก</li>
                 <li><b>H<sub>max</sub></b> = 1.67 H<sub>s</sub> คือความสูงเฉลี่ยของคลื่น 1% ที่สูงที่สุด (มีคลื่นสูงกว่าค่านี้ราว 0.4%) ตาม DS-13 Table B-2</li>
                 <li><b>ตรวจตามแนวขอบ</b> แบ่งเส้นรอบรูปของ Project Boundary และแพแต่ละแพเป็นช่วงตามระยะที่เลือก ทำข้อ 2–5 ที่กึ่งกลางทุกช่วง โดยนับเฉพาะลมที่พัดเข้าหาด้านนอก (ถ้าเลือก) แล้วเทียบ H<sub>s</sub> กับค่าที่รับได้: เขียว &lt; 90%, ส้ม 90–100%, แดงเกิน · ช่วงที่กึ่งกลางอยู่บนบกจะไม่ตรวจ</li>
+                <li><b>Wave Breaker</b> ช่วงที่ H<sub>s</sub> เกินค่าที่รับได้ ต้องลดคลื่นให้เหลือไม่เกินค่าที่รับได้ จึงต้องการสัมประสิทธิ์การส่งผ่าน K<sub>t</sub> = H<sub>t</sub>/H<sub>i</sub> ≤ H<sub>s,รับได้</sub>/H<sub>s</sub> และประสิทธิภาพ η = 1 − K<sub>t</sub> (ลดความสูงคลื่น) หรือ 1 − K<sub>t</sub><sup>2</sup> (ลดพลังงานคลื่น) ปัดขึ้นเป็นจำนวนเต็ม % · ประสิทธิภาพของ WB ลอยน้ำขึ้นกับคาบคลื่น จึงแสดง T<sub>p</sub> และ L<sub>0</sub> ของคลื่นออกแบบไว้ให้เทียบกับกราฟ K<sub>t</sub> ของผู้ผลิต</li>
+                <li><b>วัดระยะ</b> ระยะทางคำนวณบนทรงรี WGS84 (Vincenty) ทิศเป็นมุมจากทิศเหนือจริง พื้นที่คำนวณจากพิกัด UTM แล้วปรับด้วย scale factor ของ UTM ให้เป็นพื้นที่จริงบนพื้นผิว (1 ไร่ = 1,600 m², 1 งาน = 400 m², 1 ตร.วา = 4 m²)</li>
               </ol>
               <p><b>สมการ DS-13 (F เป็น mile, V เป็น mph, H เป็น ft):</b> <code>tmin = 1.87·F^0.67 / V^0.34</code> (ชม.) · <code>Hs = 0.0245·F^0.5·V·(1.1+0.0156V)^0.5</code> · <code>T = 0.464·F^(1/3)·V^(1/3)·(1.1+0.0156V)^(1/6)</code> · <code>L0 = gT²/2π</code> · ปรับช่วงเวลาลม (CEM): <code>Ut/U3600 = 1.277 + 0.296·tanh(0.9·log(45/t))</code> เมื่อ t &lt; 1 ชม. และ <code>−0.15·log t + 1.5334</code> เมื่อ t ≥ 1 ชม.</p>
               <p><b>ข้อจำกัด:</b> ใช้ได้กับน้ำลึก (ความลึก &gt; L<sub>0</sub>/2) ไม่รวมการหักเห การเลี้ยวเบน การสะท้อน และคลื่นที่ลอดใต้แพ ผลขึ้นกับระดับน้ำของเส้นขอบอ่าง ถ้ามีเส้นขอบที่ระดับน้ำออกแบบ ควรใช้เส้นนั้นแทน</p>
               <p><b>ตรวจข้อมูลแต่ละอ่าง</b> (แถวที่เน้นคืออ่างที่เปิดอยู่)</p>
               <div class="tblwrap"><table class="vtbl">
-                <thead><tr><th>อ่าง</th><th>UTM</th><th>พื้นที่ไฟล์ (km²)</th><th>อ้างอิง (km²)</th><th>ต่าง</th><th>เขื่อนถึงขอบน้ำ</th><th>ลมตั้งต้น</th></tr></thead>
+                <thead><tr><th>อ่าง</th><th>UTM</th><th>พื้นที่ไฟล์ <span class="nocase">(km²)</span></th><th>อ้างอิง <span class="nocase">(km²)</span></th><th>ต่าง</th><th>เขื่อนถึงขอบน้ำ</th><th>ลมตั้งต้น</th></tr></thead>
                 <tbody id="verBody"></tbody>
               </table></div>
               <p id="verNote"></p>
@@ -1074,6 +1171,7 @@ function draw() {
     ctx.lineWidth = 2.4; ctx.strokeStyle = c.sel; ctx.stroke();
     ctx.beginPath(); ctx.arc(sx, sy, 2, 0, 7); ctx.fillStyle = c.ok; ctx.fill();
   }
+  drawMeas();
   // scale bar + north arrow (grid north)
   const target = niceStep(110 / st.view.s), pxl = target * st.view.s;
   ctx.fillStyle = labInk; ctx.strokeStyle = labInk; ctx.lineWidth = 1.5;
@@ -1124,13 +1222,19 @@ cv.addEventListener('pointerdown', e => {
   $('hint').hidden = true;
   cv.setPointerCapture(e.pointerId);
   ptrs.set(e.pointerId, { x: e.offsetX, y: e.offsetY });
-  if (ptrs.size === 1) { downAt = { x: e.offsetX, y: e.offsetY }; moved = false; }
-  if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch0 = { d: Math.hypot(a.x - b.x, a.y - b.y), s: st.view.s }; moved = true; }
+  if (ptrs.size === 1) { downAt = { x: e.offsetX, y: e.offsetY }; moved = false; MEAS.cand = MEAS.on ? measHit(e.offsetX, e.offsetY, measTol(e)) : -1; MEAS.drag = -1; }
+  if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch0 = { d: Math.hypot(a.x - b.x, a.y - b.y), s: st.view.s }; moved = true; MEAS.cand = MEAS.drag = -1; }
 });
 cv.addEventListener('pointermove', e => {
   const [wx, wy] = toWorld(e.offsetX, e.offsetY), [lo, la] = st.proj.inv(wx, wy);
   $('readout').textContent = 'UTM ' + ZONE + 'N  E ' + fmtInt(wx) + '  N ' + fmtInt(wy) + '  ·  ' + la.toFixed(5) + '°N ' + lo.toFixed(5) + '°E';
-  if (!ptrs.has(e.pointerId)) { if (e.pointerType === 'mouse') hoverPiece(e.offsetX, e.offsetY); return; }
+  if (!ptrs.has(e.pointerId)) {
+    if (MEAS.on) {
+      if (e.pointerType === 'mouse') { cv.classList.toggle('onvert', measHit(e.offsetX, e.offsetY, 10) >= 0); if (!MEAS.done && MEAS.pts.length) { MEAS.hover = [wx, wy]; scheduleDraw(); } }
+      return;
+    }
+    if (e.pointerType === 'mouse') hoverPiece(e.offsetX, e.offsetY); return;
+  }
   const prev = ptrs.get(e.pointerId);
   ptrs.set(e.pointerId, { x: e.offsetX, y: e.offsetY });
   if (ptrs.size === 2 && pinch0) {
@@ -1142,13 +1246,16 @@ cv.addEventListener('pointermove', e => {
     afterView(true); return;
   }
   if (downAt && Math.hypot(e.offsetX - downAt.x, e.offsetY - downAt.y) > 5) moved = true;
+  if (moved && MEAS.cand >= 0 && ptrs.size === 1) { MEAS.drag = MEAS.cand; MEAS.pts[MEAS.drag] = [wx, wy]; MEAS.hover = null; measRender(); return; }
   if (moved) { st.view.cx -= (e.offsetX - prev.x) / st.view.s; st.view.cy += (e.offsetY - prev.y) / st.view.s; afterView(true); }
 });
 function endPtr(e) {
   const wasTap = ptrs.size === 1 && !moved && downAt;
   ptrs.delete(e.pointerId);
   if (ptrs.size < 2) pinch0 = null;
-  if (wasTap && e.type === 'pointerup') {
+  if (MEAS.drag >= 0) { MEAS.drag = MEAS.cand = -1; measRender(); }
+  else if (wasTap && e.type === 'pointerup' && MEAS.on) measTap(e.offsetX, e.offsetY, e);
+  else if (wasTap && e.type === 'pointerup') {
     const pc = pickPiece(e.offsetX, e.offsetY);
     if (pc) showPop(pc, true);
     else { hidePop(true); const [wx, wy] = toWorld(e.offsetX, e.offsetY); st.presetIdx = -1; setPointUTM(wx, wy); }
@@ -1156,7 +1263,7 @@ function endPtr(e) {
   if (ptrs.size === 0) downAt = null;
 }
 cv.addEventListener('pointerup', endPtr); cv.addEventListener('pointercancel', endPtr);
-cv.addEventListener('pointerleave', () => { if (!POP.pinned) hidePop(); cv.classList.remove('onpiece'); });
+cv.addEventListener('pointerleave', () => { if (!POP.pinned) hidePop(); cv.classList.remove('onpiece'); if (MEAS.hover) { MEAS.hover = null; scheduleDraw(); } });
 cv.addEventListener('wheel', e => {
   e.preventDefault();
   const [wx0, wy0] = toWorld(e.offsetX, e.offsetY);
@@ -1395,8 +1502,9 @@ $('goPt').onclick = () => {
   zoomTo(...st.pt.xy, 16000); afterView();
 };
 async function copyText(txt, okEl, fallbackEl, okMsg) {
-  try { await navigator.clipboard.writeText(txt); okEl.textContent = okMsg; if (fallbackEl) fallbackEl.hidden = true; }
-  catch (err) { if (fallbackEl) { fallbackEl.hidden = false; fallbackEl.value = txt; fallbackEl.focus(); fallbackEl.select(); } okEl.textContent = 'กด Ctrl/Cmd+C เพื่อคัดลอก'; }
+  const say = m => okEl ? (okEl.textContent = m) : toast(m, 4000);
+  try { await navigator.clipboard.writeText(txt); say(okMsg); if (fallbackEl) fallbackEl.hidden = true; }
+  catch (err) { if (fallbackEl) { fallbackEl.hidden = false; fallbackEl.value = txt; fallbackEl.focus(); fallbackEl.select(); } say('กด Ctrl/Cmd+C เพื่อคัดลอก'); }
 }
 $('copyTsv').onclick = () => {
   const U1 = u1h();
@@ -1487,6 +1595,72 @@ const CHK = { res: null, running: false, token: 0, stale: false, showAll: false 
 const ROLE_LBL = { bnd: 'Project Boundary', pv: 'PV Array' };
 function allowFor(role) { const v = parseFloat($(role === 'pv' ? 'allowPV' : 'allowBnd').value); return v > 0 ? v : NaN; }
 function checkLayers() { return st.prjLayers.filter(L => L.vis); }
+
+// ---------- Wave Breaker: efficiency needed to bring Hs at a perimeter piece down to the allowable Hs ----------
+// Kt = Ht/Hi ≤ Hallow/Hs  →  η = 1 − Kt (wave-height reduction) or 1 − Kt² (wave-energy reduction), rounded UP to a whole %.
+const WB_RAMP = ['#994a00', '#c56604', '#ef852e', '#ffb071', '#ffe0bf'];   // one-hue ordinal ramp, low → high η, checked on the dark water surface
+const WB_BASE = 'rgba(161,161,161,0.55)';
+const WB = { view: 'chk', def: 'h' };
+{ const p = lsGet('fwe-wb'); if (p) { if (p.view === 'wb') WB.view = 'wb'; if (p.def === 'e') WB.def = 'e'; } }
+const saveWB = () => lsSet('fwe-wb', { view: WB.view, def: WB.def });
+const WB_DEF_TXT = { h: 'η = 1 − H<sub>t</sub>/H<sub>i</sub> (ลดความสูงคลื่น)', e: 'η = 1 − (H<sub>t</sub>/H<sub>i</sub>)<sup>2</sup> (ลดพลังงานคลื่น)' };
+function wbEta(Hs, A) { if (!(Hs > A) || !(A > 0)) return 0; const k = A / Hs; return WB.def === 'e' ? 1 - k * k : 1 - k; }
+const etaPct = e => Math.ceil(e * 100 - 1e-9);
+const wbStepOf = mx => { const m = mx * 100; return m <= 25 ? 5 : m <= 50 ? 10 : 20; };
+const wbBand = (e, s) => Math.min(4, Math.floor(e * 100 / s + 1e-9));
+const wbBandLbl = (b, s) => b === 4 ? '≥ ' + 4 * s + '%' : b * s + '–' + (b + 1) * s + '%';
+const L0of = T => 9.80665 * T * T / (2 * Math.PI);
+function wbPrep(R) {
+  let mx = 0;
+  for (const p of R.pieces) { p.eta = p.cls === 'over' ? wbEta(p.Hs, allowFor(p.tg.role)) : 0; if (p.eta > mx) mx = p.eta; }
+  R.wbMax = mx; R.wbS = wbStepOf(mx);
+}
+function wbRole(R, role) {
+  const ps = R.pieces.filter(p => p.tg.role === role); if (!ps.length) return null;
+  const o = ps.filter(p => p.cls === 'over');
+  const mx = o.length ? o.reduce((a, p) => (p.eta > a.eta ? p : a)) : null;
+  const bands = [0, 0, 0, 0, 0]; o.forEach(p => { bands[wbBand(p.eta, R.wbS)] += p.len; });
+  return { A: allowFor(role), n: o.length, len: o.reduce((t, p) => t + p.len, 0), mx, bands };
+}
+function wbHTML(R) {
+  const roles = ['pv', 'bnd'].map(r => [r, wbRole(R, r)]).filter(x => x[1]);
+  if (!roles.length) return '';
+  const any = roles.some(([, w]) => w.n);
+  let h = '<div class="sum" id="wbSum"><div class="sumhead"><b>Wave Breaker ที่ต้องใช้</b>' + (any ? '<span class="tag">ประสิทธิภาพขั้นต่ำ</span>' : '<span class="badge ok">ไม่ต้องใช้</span>') + '</div>';
+  h += '<div class="wbgrid">' + roles.map(([role, w]) => '<div class="wbk"><span class="k">' + ROLE_LBL[role] + '</span>'
+    + (w.n ? '<span class="v">≥ ' + etaPct(w.mx.eta) + '<small>%</small></span><span class="s">K<sub>t</sub> ≤ ' + (w.A / w.mx.Hs).toFixed(2) + '</span><span class="s">ยาว ' + fmtInt(w.len) + ' m</span>'
+      + '<span class="s">H<sub>s</sub> ' + w.mx.Hs.toFixed(2) + ' → ' + w.A.toFixed(2) + ' m</span><span class="s">T<sub>p</sub> ' + w.mx.T.toFixed(1) + ' s · L<sub>0</sub> ' + L0of(w.mx.T).toFixed(0) + ' m</span>'
+      : '<span class="v none">ไม่ต้องใช้</span><span class="s">H<sub>s</sub> ไม่เกิน ' + w.A.toFixed(2) + ' m ทุกช่วง</span>') + '</div>').join('') + '</div>';
+  if (any) {
+    const rows = [4, 3, 2, 1, 0].filter(b => roles.some(([, w]) => w.bands[b] > 0));
+    h += '<div class="tblwrap"><table class="wbtbl"><thead><tr><th><span class="nocase">η</span> ที่ต้องใช้</th>' + roles.map(([r]) => '<th>' + (r === 'pv' ? 'PV' : 'Boundary') + ' <span class="nocase">(m)</span></th>').join('') + '</tr></thead><tbody>'
+      + rows.map(b => '<tr><td><i class="sw" style="background:' + WB_RAMP[b] + '"></i>' + wbBandLbl(b, R.wbS) + '</td>' + roles.map(([, w]) => '<td>' + (w.bands[b] ? fmtInt(w.bands[b]) : '—') + '</td>').join('') + '</tr>').join('')
+      + '</tbody></table></div>'
+      + '<div class="wbrow"><span class="tag">สีบนแผนที่</span><div class="seg sm" role="group" aria-label="สีบนแผนที่">'
+      + [['chk', 'ผลตรวจ H<sub>s</sub>'], ['wb', 'η ของ WB']].map(([k, t]) => '<button data-wbv="' + k + '" aria-pressed="' + (WB.view === k) + '">' + t + '</button>').join('') + '</div></div>'
+      + '<label class="wbdef"><span>นิยาม</span><select id="wbDef"><option value="h"' + (WB.def === 'h' ? ' selected' : '') + '>η = 1 − Ht/Hi (ลดความสูงคลื่น)</option><option value="e"' + (WB.def === 'e' ? ' selected' : '') + '>η = 1 − (Ht/Hi)² (ลดพลังงานคลื่น)</option></select></label>'
+      + '<p class="note">เลือก WB ที่ให้ K<sub>t</sub> ไม่เกินค่านี้ที่คาบคลื่น T<sub>p</sub> ข้างต้น (เทียบกราฟของผู้ผลิต) และให้แนว WB ยื่นเลยปลายช่วงที่เกินออกไป เพราะคลื่นอ้อมปลาย WB ได้</p>';
+  }
+  return h + '</div>';
+}
+function renderLegend() {
+  const R = CHK.res, el = $('legend');
+  if (!R) { el.hidden = true; return; }
+  if (WB.view === 'wb' && R.wbMax > 0) {
+    const present = [...new Set(R.pieces.filter(p => p.cls === 'over').map(p => wbBand(p.eta, R.wbS)))].sort((a, b) => a - b);
+    el.innerHTML = '<span><em>η ของ WB</em></span>' + present.map(b => '<span><i class="lg" style="background:' + WB_RAMP[b] + '"></i>' + wbBandLbl(b, R.wbS) + '</span>').join('')
+      + '<span><i class="lg base"></i>ไม่ต้องใช้</span><span><i class="lg na"></i>บนบก / ไม่มีทิศรับลม</span>';
+  } else el.innerHTML = '<span><i class="lg ok"></i>ไม่เกิน 90%</span><span><i class="lg near"></i>90–100%</span><span><i class="lg over"></i>เกินค่าที่รับได้</span><span><i class="lg na"></i>บนบก / ไม่มีทิศรับลม</span>';
+  el.hidden = false;
+}
+function capLegend() {
+  const R = CHK.res;
+  if (WB.view === 'wb' && R && R.wbMax > 0) {
+    const present = [...new Set(R.pieces.filter(p => p.cls === 'over').map(p => wbBand(p.eta, R.wbS)))].sort((a, b) => a - b);
+    return { title: 'η WB', items: present.map(b => [WB_RAMP[b], wbBandLbl(b, R.wbS)]) };
+  }
+  return { title: '', items: [['#22C55E', '< 90%'], ['#F59E0B', '90–100%'], ['#DC2626', 'เกิน']] };
+}
 function makePieces(step) {
   const pieces = [], targets = [];
   for (const L of checkLayers()) for (const f of L.feats) {
@@ -1596,6 +1770,7 @@ function refreshCheck() {
   const R = CHK.res, out = $('chkOut');
   if (!R) { out.hidden = true; $('legend').hidden = true; scheduleDraw(); return; }
   R.pieces.forEach(p => p.cls = classify(p));
+  wbPrep(R);
   const kf = HFAC[+$('hp').value];
   let html = '', allRuns = [];
   for (const role of ['pv', 'bnd']) {
@@ -1617,10 +1792,11 @@ function refreshCheck() {
   }
   allRuns.sort((a, b) => b.max.Hs - a.max.Hs);
   R.runs = allRuns;
+  html += wbHTML(R);
   if (allRuns.length) {
     const nShow = CHK.showAll || CARD.state === 'max' ? Math.min(allRuns.length, 200) : Math.min(allRuns.length, 5);
     html += '<div class="sum"><div class="sumhead"><b>ช่วงที่เกิน</b><span class="tag">เรียงจาก H<sub>s</sub> สูงสุด</span></div><div class="runs">'
-      + allRuns.slice(0, nShow).map((r, i) => '<button class="run" data-run="' + i + '"><span class="t">' + (r.tg.role === 'pv' ? r.tg.name : 'Boundary') + '</span><span class="h">' + fmt(r.max.Hs, 2) + ' m</span>'
+      + allRuns.slice(0, nShow).map((r, i) => '<button class="run" data-run="' + i + '"><span class="t">' + (r.tg.role === 'pv' ? r.tg.name : 'Boundary') + '</span><span class="h">' + fmt(r.max.Hs, 2) + ' m · η ' + etaPct(r.max.eta) + '%</span>'
         + '<span class="s">' + (r.whole ? 'ทั้งรอบ' : 'กม. ' + chain(r.ch0) + '–' + chain(r.ch1) + (r.wrap ? ' (ผ่านจุดเริ่ม)' : '')) + ' · ' + fmtInt(r.len) + ' m · ลมจาก ' + r.max.dir + '° · F ' + fmt(r.max.F / 1000, 2) + ' km</span></button>').join('')
       + '</div>' + (allRuns.length > 5 ? '<button class="btn ghost sm" id="runsAll">' + (CHK.showAll ? 'แสดงน้อยลง' : 'แสดงทั้งหมด ' + allRuns.length + ' ช่วง') + '</button>' : '') + '</div>';
   }
@@ -1638,23 +1814,31 @@ function refreshCheck() {
   });
   if ($('runsAll')) $('runsAll').onclick = () => { CHK.showAll = !CHK.showAll; refreshCheck(); };
   $('chkCopy').onclick = () => copyText(checkTSV(), $('chkCopied'), $('chkFallback'), 'คัดลอกแล้ว ' + R.pieces.length.toLocaleString('en-US') + ' แถว');
-  $('legend').hidden = false;
+  out.querySelectorAll('[data-wbv]').forEach(b => b.onclick = () => {
+    WB.view = b.dataset.wbv; saveWB();
+    out.querySelectorAll('[data-wbv]').forEach(x => x.setAttribute('aria-pressed', x.dataset.wbv === WB.view));
+    renderLegend(); scheduleDraw();
+  });
+  if ($('wbDef')) $('wbDef').onchange = () => { WB.def = $('wbDef').value; saveWB(); refreshCheck(); if (POP.pc) showPop(POP.pc, POP.pinned); };
+  renderLegend();
   scheduleDraw(); placePop();
 }
 function checkTSV() {
   const R = CHK.res, kf = HFAC[+$('hp').value];
   const lines = ['# FPV Wave Estimator · wave check · ' + RES[R.res].th + ' (' + RES[R.res].code + ') · UTM ' + ZONE + 'N · U1h ' + R.P.U1.toFixed(2) + ' m/s · ' + R.P.modeLbl + (R.P.exposed ? ' · exposed only' : '') + (R.P.shelter ? ' · PV shelter' : ' · open water') + ' · step ' + R.P.step + ' m',
-    'Layer\tFeature\tChainage_m\tE\tN\tLat\tLon\tStatus\tWindFrom_deg\tFeff_km\tHs_m\tHd_m\tAllowHs_m\tRatio'];
+    'Layer\tFeature\tChainage_m\tE\tN\tLat\tLon\tStatus\tWindFrom_deg\tFeff_km\tHs_m\tHd_m\tTp_s\tAllowHs_m\tRatio\tKt_req\tWB_eta_req_pct (' + (WB.def === 'e' ? '1-Kt^2' : '1-Kt') + ')'];
   for (const p of R.pieces) {
     const [lo, la] = utmToLL(p.x, p.y, ZONE), A = allowFor(p.tg.role);
     lines.push([ROLE_LBL[p.tg.role], p.tg.name, p.ch.toFixed(1), p.x.toFixed(1), p.y.toFixed(1), la.toFixed(6), lo.toFixed(6), p.cls,
-      p.dir ?? '', p.F != null ? (p.F / 1000).toFixed(4) : '', p.Hs != null ? p.Hs.toFixed(3) : '', p.Hs != null ? (p.Hs * kf).toFixed(3) : '', A.toFixed(2), p.Hs != null ? (p.Hs / A).toFixed(3) : ''].join('\t'));
+      p.dir ?? '', p.F != null ? (p.F / 1000).toFixed(4) : '', p.Hs != null ? p.Hs.toFixed(3) : '', p.Hs != null ? (p.Hs * kf).toFixed(3) : '', p.T != null ? p.T.toFixed(2) : '', A.toFixed(2), p.Hs != null ? (p.Hs / A).toFixed(3) : '',
+      p.cls === 'over' ? (A / p.Hs).toFixed(3) : '', p.cls === 'over' ? etaPct(p.eta) : (p.Hs != null ? 0 : '')].join('\t'));
   }
   return lines.join('\n');
 }
 // draw results batched by class: one path per colour keeps thousands of 1 m pieces fast while panning
 function drawCheck(c, imgVis, labBg) {
   const R = CHK.res; if (!R || R.res !== st.res) return;
+  if (WB.view === 'wb' && R.wbMax > 0) { drawWB(R, c); return; }
   const paths = { ok: new Path2D(), near: new Path2D(), over: new Path2D(), na: new Path2D() }, used = {};
   for (const p of R.pieces) {
     const [ax, ay] = toScreen(p.x0, p.y0), [bx, by] = toScreen(p.x1, p.y1);
@@ -1676,6 +1860,39 @@ function drawCheck(c, imgVis, labBg) {
     const lbl = (role === 'pv' ? 'PV ' : 'BND ') + 'Hs ' + mx.Hs.toFixed(2) + ' m', tw = ctx.measureText(lbl).width;
     ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.9)'; ctx.shadowBlur = 4;
     ctx.fillText(lbl, sx + 9 + tw > W - 8 ? sx - 9 - tw : sx + 9, role === 'pv' ? sy - 8 : sy + 18); ctx.restore();
+  }
+  if (POP.pc) {
+    const p = POP.pc, [ax, ay] = toScreen(p.x0, p.y0), [bx, by] = toScreen(p.x1, p.y1);
+    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 10; ctx.globalAlpha = 0.28; ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke(); ctx.globalAlpha = 1;
+  }
+}
+const onScr = (ax, ay, bx, by) => !(Math.max(ax, bx) < -10 || Math.min(ax, bx) > W + 10 || Math.max(ay, by) < -10 || Math.min(ay, by) > H + 10);
+function drawWB(R, c) {
+  const bands = [0, 1, 2, 3, 4].map(() => new Path2D()), base = new Path2D(), na = new Path2D(), used = new Set();
+  for (const p of R.pieces) {
+    const [ax, ay] = toScreen(p.x0, p.y0), [bx, by] = toScreen(p.x1, p.y1);
+    if (!onScr(ax, ay, bx, by)) continue;
+    let path, k;
+    if (p.cls === 'over') { k = wbBand(p.eta, R.wbS); path = bands[k]; }
+    else if (p.cls === 'ok' || p.cls === 'near') { k = 'base'; path = base; }
+    else { k = 'na'; path = na; }
+    path.moveTo(ax, ay); path.lineTo(bx, by); used.add(k);
+  }
+  ctx.lineCap = 'butt';
+  if (used.has('na')) { ctx.strokeStyle = c.muted; ctx.lineWidth = 2.5; ctx.setLineDash([3, 3]); ctx.stroke(na); ctx.setLineDash([]); }
+  if (used.has('base')) { ctx.strokeStyle = WB_BASE; ctx.lineWidth = 3; ctx.stroke(base); }
+  for (let k = 0; k < 5; k++) if (used.has(k)) { ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = 7; ctx.stroke(bands[k]); ctx.strokeStyle = WB_RAMP[k]; ctx.lineWidth = 5; ctx.stroke(bands[k]); }
+  // one label per exceeding stretch at its worst piece, pushed outward; skipped when it would overlap another label
+  const boxes = []; let n = 0;
+  for (const r of [...(R.runs || [])].sort((a, b) => b.max.eta - a.max.eta)) {
+    if (n >= 40) break;
+    const p = r.max, [sx, sy] = toScreen(p.x, p.y);
+    if (sx < 20 || sy < 20 || sx > W - 20 || sy > H - 20) continue;
+    const ox = sx + p.nx * 18, oy = sy - p.ny * 18, t = 'η ' + etaPct(p.eta) + '%';
+    ctx.font = '500 11px ' + FONT_MONO; const w = ctx.measureText(t).width + 14;
+    const bx = [ox - w / 2, oy - 10, ox + w / 2, oy + 10];
+    if (boxHit(bx, boxes)) continue;
+    boxes.push(mapPill(t, ox, oy, { stroke: WB_RAMP[wbBand(p.eta, R.wbS)] })); n++;
   }
   if (POP.pc) {
     const p = POP.pc, [ax, ay] = toScreen(p.x0, p.y0), [bx, by] = toScreen(p.x1, p.y1);
@@ -1710,7 +1927,8 @@ function showPop(p, pin) {
   el.innerHTML = '<div class="pop-head"><b>' + (p.tg.role === 'pv' ? 'PV Array · ' + p.tg.name : 'Project Boundary') + '</b>' + (pin ? '<button class="iconbtn" id="popX" aria-label="ปิด" style="width:28px;height:28px">×</button>' : '') + '</div>'
     + '<span class="tag">กม. ' + chain(p.ch) + ' · E ' + fmtInt(p.x) + ' N ' + fmtInt(p.y) + '</span>'
     + (p.Hs != null ? '<div class="hsline"><span class="num">' + p.Hs.toFixed(2) + '<small>m</small></span><span class="badge ' + cls + '"' + (p.cls === 'near' ? ' style="color:var(--warning);border-color:rgba(245,158,11,.4)"' : '') + '>' + (p.Hs / A * 100).toFixed(0) + '% ของ ' + A.toFixed(2) + ' m</span></div>'
-      + '<dl class="kv"><dt>H<sub>s</sub> × ' + kf.toFixed(2) + '</dt><dd>' + (p.Hs * kf).toFixed(2) + ' m</dd><dt>ลมพัดมาจาก</dt><dd>' + p.dir + '° (' + compass(p.dir) + ')</dd><dt>F<sub>eff</sub></dt><dd>' + (p.F / 1000).toFixed(2) + ' km</dd><dt>T<sub>p</sub></dt><dd>' + p.T.toFixed(2) + ' s</dd></dl>'
+      + '<dl class="kv"><dt>H<sub>s</sub> × ' + kf.toFixed(2) + '</dt><dd>' + (p.Hs * kf).toFixed(2) + ' m</dd><dt>ลมพัดมาจาก</dt><dd>' + p.dir + '° (' + compass(p.dir) + ')</dd><dt>F<sub>eff</sub></dt><dd>' + (p.F / 1000).toFixed(2) + ' km</dd><dt>T<sub>p</sub></dt><dd>' + p.T.toFixed(2) + ' s</dd>'
+      + '<dt>Wave Breaker</dt><dd>' + (p.cls === 'over' ? 'η ≥ ' + etaPct(p.eta) + '% · K<sub>t</sub> ≤ ' + (A / p.Hs).toFixed(2) : 'ไม่ต้องใช้') + '</dd></dl>'
       : '<p class="note">' + STATUS_TXT[p.cls] + '</p>')
     + (pin ? '<button class="btn secondary sm" id="popUse">เปิดเป็นจุดพิจารณา</button>' : '');
   el.hidden = false;
@@ -2010,7 +2228,7 @@ function setReservoir(key, first = false) {
   const r = RES[key];
   if (r.zone !== ZONE) BM.cache.clear();
   st.res = key; ZONE = r.zone;
-  clearCheck();
+  clearCheck(); measClear();
   setMode('all');
   setShoreline(decodeRings(SHORES[key]));
   buildProjectLayers();
@@ -2072,7 +2290,7 @@ function miniSum(R) {
     const ps = R.pieces.filter(p => p.tg.role === role); if (!ps.length) return '';
     const n = R.runs.filter(r => r.tg.role === role).length;
     return (role === 'pv' ? 'PV ' : 'BND ') + (n ? 'เกิน ' + n + ' ช่วง' : 'ผ่าน');
-  }).filter(Boolean).join(' · ') + (CHK.stale ? ' · ผลรอบก่อน' : '');
+  }).filter(Boolean).join(' · ') + (R.wbMax > 0 ? ' · WB η ≥ ' + etaPct(R.wbMax) + '%' : '') + (CHK.stale ? ' · ผลรอบก่อน' : '');
 }
 
 // ---------- drag the panel edge to resize ----------
@@ -2119,14 +2337,21 @@ function composeMap(withBase) {
   g.fillStyle = '#FAFAFA'; g.font = '600 16px "Inter Tight", "Noto Sans Thai", sans-serif'; g.fillText(r.th, 16, 27);
   const tw = g.measureText(r.th).width; g.fillStyle = '#22C55E'; g.font = '400 12px ' + mono; g.fillText(r.code, 16 + tw + 10, 27);
   g.fillStyle = '#A1A1A1'; g.font = '400 11.5px ' + mono;
-  g.fillText(S.ok ? 'จุด E ' + fmtInt(st.pt.xy[0]) + ' N ' + fmtInt(st.pt.xy[1]) + ' · Hs ' + S.w.Hs.toFixed(2) + ' m · ' + HSHORT[S.p] + ' ' + (S.w.Hs * S.kf).toFixed(2) + ' m · F ' + (S.F / 1000).toFixed(2) + ' km · ลมจาก ' + S.dir + '° · U1h ' + S.U1.toFixed(1) + ' m/s' + (shelterOn() ? ' · แพบังคลื่น' : '') : 'จุดพิจารณาไม่อยู่บนผิวน้ำ', 16, 49);
+  const ptTxt = (S.ok ? 'จุด E ' + fmtInt(st.pt.xy[0]) + ' N ' + fmtInt(st.pt.xy[1]) + ' · Hs ' + S.w.Hs.toFixed(2) + ' m · ' + HSHORT[S.p] + ' ' + (S.w.Hs * S.kf).toFixed(2) + ' m · F ' + (S.F / 1000).toFixed(2) + ' km · ลมจาก ' + S.dir + '° · U1h ' + S.U1.toFixed(1) + ' m/s' + (shelterOn() ? ' · แพบังคลื่น' : '') : 'จุดพิจารณาไม่อยู่บนผิวน้ำ');
+  let rightW = 0;
   if (CHK.res && CHK.res.res === st.res) {
-    const items = [['#22C55E', '< 90%'], ['#F59E0B', '90–100%'], ['#DC2626', 'เกิน']], x0 = W - 16;
+    const LG = capLegend(), items = LG.items, x0 = W - 16;
     let x = x0; g.font = '400 11px ' + mono; g.textAlign = 'right';
-    g.fillStyle = '#A1A1A1'; g.fillText('PV ≤ ' + fmt(allowFor('pv'), 2) + ' m · BND ≤ ' + fmt(allowFor('bnd'), 2) + ' m', x0, 49);
-    for (const [col, t] of items.reverse()) { g.fillStyle = '#FAFAFA'; g.fillText(t, x, 27); x -= g.measureText(t).width + 6; g.fillStyle = col; g.fillRect(x - 16, 22, 16, 4); x -= 30; }
+    const rt = 'PV ≤ ' + fmt(allowFor('pv'), 2) + ' m · BND ≤ ' + fmt(allowFor('bnd'), 2) + ' m';
+    g.fillStyle = '#A1A1A1'; g.fillText(rt, x0, 49); rightW = g.measureText(rt).width + 24;
+    for (const [col, t] of items.slice().reverse()) { g.fillStyle = '#FAFAFA'; g.fillText(t, x, 27); x -= g.measureText(t).width + 6; g.fillStyle = col; g.fillRect(x - 16, 22, 16, 4); x -= 30; }
+    if (LG.title) { g.fillStyle = '#A1A1A1'; g.fillText(LG.title + (WB.def === 'e' ? ' (1 − Kt²)' : ' (1 − Kt)'), x + 8, 27); }
     g.textAlign = 'left';
   }
+  g.fillStyle = '#A1A1A1'; g.font = '400 11.5px ' + mono;
+  let pt = ptTxt; const room = W - 32 - rightW;
+  if (g.measureText(pt).width > room) { while (pt.length > 8 && g.measureText(pt + '…').width > room) pt = pt.slice(0, -1); pt += '…'; }
+  g.fillText(pt, 16, 49);
   g.fillStyle = '#A1A1A1'; g.font = '400 10.5px ' + mono;
   g.fillText('FPV Wave Estimator · USBR DS-13 / CEM · UTM ' + ZONE + 'N · ' + nowTH() + ' · ' + $('attrib').textContent.slice(0, 140), 16, hdr + H + 19);
   return c;
@@ -2203,17 +2428,29 @@ async function buildReport() {
   const R = CHK.res;
   if (R && R.res === st.res) {
     R.pieces.forEach(p => p.cls = classify(p));
+    wbPrep(R);
     const rows = [];
     for (const role of ['pv', 'bnd']) {
       const s = roleStats(R, role); if (!s) continue;
       rows.push([ROLE_LBL[role], s.A.toFixed(2), s.mx ? s.mx.Hs.toFixed(2) + ' (' + (s.mx.Hs / s.A * 100).toFixed(0) + '%)' : '—', s.mx ? s.mx.dir + '°' : '—', s.mx ? (s.mx.Hs * S.kf).toFixed(2) : '—',
         fmtInt(s.Lover) + ' / ' + fmtInt(s.wet) + (s.wet ? ' (' + (100 * s.Lover / s.wet).toFixed(1) + '%)' : ''), fmtInt(s.Lnear), s.runs.length ? '<b class="bad">ไม่ผ่าน ' + s.runs.length + ' ช่วง</b>' : '<b class="good">ผ่าน</b>']);
     }
-    const runs = (R.runs || []).slice(0, 200).map((x, i) => [i + 1, x.tg.role === 'pv' ? 'PV · ' + x.tg.name : 'Boundary', x.whole ? 'ทั้งรอบ' : chain(x.ch0) + ' – ' + chain(x.ch1), fmtInt(x.len), x.max.Hs.toFixed(2), (x.max.Hs / allowFor(x.tg.role) * 100).toFixed(0) + '%', x.max.dir + '°', (x.max.F / 1000).toFixed(2)]);
+    const runs = (R.runs || []).slice(0, 200).map((x, i) => [i + 1, x.tg.role === 'pv' ? 'PV · ' + x.tg.name : 'Boundary', x.whole ? 'ทั้งรอบ' : chain(x.ch0) + ' – ' + chain(x.ch1), fmtInt(x.len), x.max.Hs.toFixed(2), (x.max.Hs / allowFor(x.tg.role) * 100).toFixed(0) + '%', x.max.dir + '°', (x.max.F / 1000).toFixed(2), etaPct(x.max.eta) + '%']);
+    const wbr = ['pv', 'bnd'].map(rl => [rl, wbRole(R, rl)]).filter(x => x[1]), wbAny = wbr.some(([, w]) => w.n);
+    const wbSec = '<h3>Wave Breaker ที่ต้องใช้</h3>'
+      + (wbAny ? '<p>ช่วงที่ H<sub>s</sub> เกินค่าที่รับได้ต้องลดคลื่นด้วย Wave Breaker ให้ K<sub>t</sub> = H<sub>t</sub>/H<sub>i</sub> ≤ H<sub>s,รับได้</sub>/H<sub>s</sub> · นิยามประสิทธิภาพ ' + WB_DEF_TXT[WB.def] + ' ปัดขึ้นเป็นจำนวนเต็ม %</p>'
+        + '<table border="1" cellpadding="5" style="border-collapse:collapse;width:100%"><thead><tr><th>แนว</th><th>η ขั้นต่ำ</th><th>K<sub>t</sub> ที่ต้องการ</th><th>ยาวที่ต้องติด WB (m)</th><th>คลื่นออกแบบ H<sub>s</sub> → ค่าที่รับได้ (m)</th><th>T<sub>p</sub> (s)</th><th>L<sub>0</sub> (m)</th><th>ลมจาก</th></tr></thead><tbody>'
+        + wbr.map(([rl, w]) => '<tr><td>' + ROLE_LBL[rl] + '</td>' + (w.n ? '<td><b>≥ ' + etaPct(w.mx.eta) + '%</b></td><td>≤ ' + (w.A / w.mx.Hs).toFixed(2) + '</td><td>' + fmtInt(w.len) + '</td><td>' + w.mx.Hs.toFixed(2) + ' → ' + w.A.toFixed(2) + '</td><td>' + w.mx.T.toFixed(1) + '</td><td>' + L0of(w.mx.T).toFixed(0) + '</td><td>' + w.mx.dir + '°</td>' : '<td colspan="7" class="good">ไม่ต้องใช้</td>') + '</tr>').join('')
+        + '</tbody></table>'
+        + '<p>ความยาวแนวที่ต้องใช้ WB แยกตามประสิทธิภาพที่ต้องการ</p>'
+        + T([4, 3, 2, 1, 0].filter(b => wbr.some(([, w]) => w.bands[b] > 0)).map(b => ['<span style="display:inline-block;width:14px;height:6px;border-radius:2px;margin-right:8px;vertical-align:middle;background:' + WB_RAMP[b] + ';border:1px solid #bbb"></span>' + wbBandLbl(b, R.wbS)].concat(wbr.map(([, w]) => w.bands[b] ? fmtInt(w.bands[b]) : '—'))), ['η ที่ต้องใช้'].concat(wbr.map(([rl]) => (rl === 'pv' ? 'PV Array' : 'Project Boundary') + ' (m)')))
+        + '<p>ประสิทธิภาพของ Wave Breaker ลอยน้ำขึ้นกับคาบคลื่นและขนาดของ WB จึงควรเลือกผลิตภัณฑ์ที่ให้ K<sub>t</sub> ไม่เกินค่าข้างต้นที่คาบ T<sub>p</sub> ของคลื่นออกแบบ (ตามกราฟของผู้ผลิตหรือผลทดสอบ) และให้แนว WB ยื่นเลยปลายช่วงที่เกินออกไป เพราะคลื่นอ้อมปลาย WB ได้</p>'
+        : '<p class="good">H<sub>s</sub> ทุกช่วงไม่เกินค่าที่รับได้ ไม่ต้องใช้ Wave Breaker</p>');
     chk = '<p>ตั้งค่า: แบ่งช่วงทุก ' + R.P.step + ' m · ทิศ ' + R.P.modeLbl + (R.P.exposed ? ' · นับเฉพาะลมที่พัดเข้าด้านนอกของขอบ' : '') + (R.P.shelter ? ' · แพ PV บังคลื่น' : ' · ผิวน้ำเปิด') + ' · U<sub>1h</sub> ' + R.P.U1.toFixed(2) + ' m/s · ' + R.pieces.length.toLocaleString('en-US') + ' ช่วง</p>'
       + (CHK.stale ? '<p class="warn">หมายเหตุ: ค่าลมหรือตัวเลือกถูกเปลี่ยนหลังการคำนวณ ผลในส่วนนี้เป็นของรอบก่อน</p>' : '')
       + '<table border="1" cellpadding="5" style="border-collapse:collapse;width:100%"><thead><tr><th>แนว</th><th>H<sub>s</sub> ที่รับได้ (m)</th><th>H<sub>s</sub> สูงสุด (m)</th><th>ลมจาก</th><th>' + HSHORT[S.p] + ' (m)</th><th>ยาวที่เกิน / ยาวบนน้ำ (m)</th><th>ยาวช่วง 90–100% (m)</th><th>ผล</th></tr></thead><tbody>' + rows.map(rw => '<tr>' + rw.map(c => '<td>' + c + '</td>').join('') + '</tr>').join('') + '</tbody></table>'
-      + (runs.length ? '<h3>ช่วงที่เกินค่าที่รับได้ (เรียงจาก H<sub>s</sub> สูงสุด)</h3>' + T(runs, ['#', 'ตำแหน่ง', 'กม. (จากจุดแรกของรูป)', 'ยาว (m)', 'H<sub>s</sub> สูงสุด (m)', '% ของค่าที่รับได้', 'ลมจาก', 'F<sub>eff</sub> (km)']) + (R.runs.length > 200 ? '<p>แสดง 200 จาก ' + R.runs.length + ' ช่วง</p>' : '') : '<p>ไม่มีช่วงที่เกินค่าที่รับได้</p>');
+      + wbSec
+      + (runs.length ? '<h3>ช่วงที่เกินค่าที่รับได้ (เรียงจาก H<sub>s</sub> สูงสุด)</h3>' + T(runs, ['#', 'ตำแหน่ง', 'กม. (จากจุดแรกของรูป)', 'ยาว (m)', 'H<sub>s</sub> สูงสุด (m)', '% ของค่าที่รับได้', 'ลมจาก', 'F<sub>eff</sub> (km)', 'η WB']) + (R.runs.length > 200 ? '<p>แสดง 200 จาก ' + R.runs.length + ' ช่วง</p>' : '') : '<p>ไม่มีช่วงที่เกินค่าที่รับได้</p>');
   } else chk = '<p class="warn">ยังไม่ได้ตรวจตามแนวขอบ กด Compute ในกล่อง "ความสามารถรับคลื่นของ PV Array และ Project Boundary" แล้วสร้างรายงานใหม่เพื่อใส่ผลส่วนนี้</p>';
   const vrow = (() => { const d = (V.area / V.ref - 1) * 100; return T([['เส้นขอบอ่าง', 'Hydro_aw.kmz · ' + V.note], ['พื้นที่ผิวน้ำจากไฟล์', V.area.toFixed(1) + ' km² เทียบค่าอ้างอิง ' + V.ref + ' km² (' + V.src + ') ต่าง ' + (d >= 0 ? '+' : '') + d.toFixed(1) + '%' + (Math.abs(d) > 10 ? ' — ควรยืนยันเส้นขอบที่ระดับน้ำออกแบบ' : '')], ['ตำแหน่งเขื่อน', 'ห่างจากขอบน้ำในไฟล์ ' + V.dam + ' m'], ['เทียบไฟล์ Excel', V.excel], ['ผังโครงการ', r.prj ? 'Boundary_' + PROJECTS[r.prj].name + '.kmz และ PV_Array_' + PROJECTS[r.prj].name + '.kmz (' + st.prjLayers[1].feats.length + ' แพ)' + (PROJECTS[r.prj].bndOpen ? ' · เส้น Boundary ในไฟล์ไม่ปิดรูปฝั่งตลิ่ง ไม่ตรวจเส้นปิด' : '') : 'ยังไม่มี']]); })();
   const css = '@page{size:A4;margin:16mm}*{box-sizing:border-box}body{margin:0;background:#fff;color:#141413;font-family:Inter,"Noto Sans Thai",system-ui,sans-serif;font-size:10.5pt;line-height:1.55}main{max-width:780px;margin:0 auto;padding:28px 28px 48px;outline:none}h1{font-family:"Inter Tight","Noto Sans Thai",sans-serif;font-size:20pt;font-weight:600;letter-spacing:-.4px;line-height:1.2;margin:0 0 4px}h2{font-family:"Inter Tight","Noto Sans Thai",sans-serif;font-size:13pt;font-weight:600;margin:26px 0 8px;padding-top:10px;border-top:1px solid #ddd}h3{font-size:11pt;font-weight:600;margin:16px 0 6px}.meta{color:#6b6b6b;font:9pt "JetBrains Mono",monospace;letter-spacing:.3px}table{border-collapse:collapse;width:100%;font-size:9.5pt;border-color:#cfcfcf}th,td{border:1px solid #cfcfcf;padding:5px 7px;text-align:left;vertical-align:top}thead th{background:#f3f3f1;font-weight:600}tbody th{background:#fafaf8;font-weight:500;width:34%}.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:6px 0 12px}.kpi{border:1px solid #ddd;border-radius:8px;padding:8px 10px}.kpi span{display:block;font-size:8.5pt;color:#6b6b6b}.kpi b{font-family:"Inter Tight",sans-serif;font-size:17pt;font-weight:600}.kpi small{font-size:9pt;color:#6b6b6b;font-weight:400}figure{margin:10px 0;break-inside:avoid}figure img{width:100%;border-radius:6px;border:1px solid #ddd}figcaption{font-size:9pt;color:#6b6b6b;margin-top:4px}.rose{display:grid;grid-template-columns:300px 1fr;gap:16px;align-items:center}.rose img{border:0}.good{color:#15803d}.bad{color:#b91c1c}.warn{color:#92400e}ol{padding-left:20px}li{margin-bottom:4px}.note{border:1px dashed #bbb;border-radius:6px;padding:10px;color:#6b6b6b;min-height:48px}@media print{h2{break-after:avoid}table{break-inside:auto}tr{break-inside:avoid}}';
@@ -2225,7 +2462,7 @@ async function buildReport() {
     + '<h2>1. ข้อมูลลมและเกณฑ์</h2>' + inputs
     + '<h2>2. ผลคำนวณที่จุดพิจารณา</h2>' + point
     + '<h2>3. แผนที่และ Fetch rose</h2>'
-    + (map.url ? '<figure><img src="' + map.url + '" alt="แผนที่"><figcaption>รูปที่ 1 แผนที่จุดพิจารณา รัศมี fetch' + (R && R.res === st.res ? ' และผลตรวจตามแนวขอบ' : '') + (map.base ? '' : ' (ไม่รวมภาพดาวเทียม)') + '</figcaption></figure>' : '')
+    + (map.url ? '<figure><img src="' + map.url + '" alt="แผนที่"><figcaption>รูปที่ 1 แผนที่จุดพิจารณา รัศมี fetch' + (R && R.res === st.res ? (WB.view === 'wb' && R.wbMax > 0 ? ' และประสิทธิภาพ Wave Breaker ที่ต้องใช้ตามแนวขอบ' : ' และผลตรวจตามแนวขอบ') : '') + (map.base ? '' : ' (ไม่รวมภาพดาวเทียม)') + '</figcaption></figure>' : '')
     + '<figure class="rose">' + (roseURL ? '<img src="' + roseURL + '" alt="Fetch rose">' : '') + '<figcaption>รูปที่ 2 Fetch rose ที่จุดพิจารณา ความยาวกลีบคือ F<sub>eff</sub> ของแต่ละทิศ สีบอก H<sub>s</sub> เทียบกับ H<sub>s</sub> ที่ PV Array รับได้ (' + fmt(D.A, 2) + ' m)' + legend + '</figcaption></figure>'
     + '<h2>4. ความสามารถรับคลื่นของ PV Array และ Project Boundary</h2>' + chk
     + '<h2>5. ข้อมูลที่ใช้และการตรวจสอบ</h2>' + vrow
@@ -2274,6 +2511,229 @@ $('repCopy').onclick = () => {
   } catch (e) { viaSelection(); }
 };
 addEventListener('keydown', e => { if (e.key === 'Escape') { $('repModal').hidden = true; $('capModal').hidden = true; } });
+
+// =====================================================================
+// ---------- measure tool: straight line / polyline / polygon ----------
+// Vertices live in UTM metres (map space). Lengths are geodesic on WGS84 (Vincenty inverse); areas come from the UTM
+// shoelace area divided by the mean squared UTM point-scale factor, which turns grid area into ground area.
+// =====================================================================
+const MEAS = { on: false, mode: 'line', pts: [], done: false, hover: null, cand: -1, drag: -1, lu: 'auto', au: 'rngw', stats: null };
+const LEN_U = { m: [1, 'm'], km: [1000, 'km'], wa: [2, 'วา'], ft: [0.3048, 'ft'], mi: [1609.344, 'mi'], nmi: [1852, 'NM'] };
+const AREA_U = { rai: [1600, 'ไร่'], m2: [1, 'm²'], ha: [1e4, 'ha'], km2: [1e6, 'km²'], ac: [4046.8564224, 'acre'] };
+const MEAS_COL = '#60A5FA', MEAS_FILL = 'rgba(96,165,250,0.14)';
+const nf = (v, d) => v.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+const sigD = v => v >= 1000 ? 1 : v >= 100 ? 2 : 3;
+function lenParts(m, u = MEAS.lu) {
+  if (u === 'auto') return m >= 1000 ? [nf(m / 1000, 3), 'km'] : [nf(m, m < 100 ? 2 : 1), 'm'];
+  const [f, s] = LEN_U[u], v = m / f; return [nf(v, sigD(v)), s];
+}
+const fmtLen = (m, u) => lenParts(m, u).join(' ');
+function areaParts(a, u = MEAS.au) {
+  if (u === 'rngw') {
+    const wa = Math.round(a / 4 * 10) / 10, rai = Math.floor(wa / 400), ngan = Math.floor((wa - rai * 400) / 100), w = wa - rai * 400 - ngan * 100;
+    return { long: rai.toLocaleString('en-US') + ' ไร่ ' + ngan + ' งาน ' + w.toFixed(1) + ' ตร.ว.', short: rai.toLocaleString('en-US') + '-' + ngan + '-' + w.toFixed(1) + ' ไร่' };
+  }
+  const [f, s] = AREA_U[u], v = a / f, t = nf(v, v >= 1000 ? 1 : v >= 10 ? 2 : 3) + ' ' + s;
+  return { long: t, short: t };
+}
+function vincenty(la1, lo1, la2, lo2) {
+  const a = 6378137, f = 1 / 298.257223563, b = a * (1 - f), rad = Math.PI / 180;
+  const L = (lo2 - lo1) * rad, U1 = Math.atan((1 - f) * Math.tan(la1 * rad)), U2 = Math.atan((1 - f) * Math.tan(la2 * rad));
+  const sU1 = Math.sin(U1), cU1 = Math.cos(U1), sU2 = Math.sin(U2), cU2 = Math.cos(U2);
+  let lam = L, lamP, it = 0, sinS, cosS, sig, cos2A, cos2Sm;
+  do {
+    const sl = Math.sin(lam), cl = Math.cos(lam);
+    sinS = Math.hypot(cU2 * sl, cU1 * sU2 - sU1 * cU2 * cl);
+    if (sinS === 0) return { d: 0, az: 0 };
+    cosS = sU1 * sU2 + cU1 * cU2 * cl; sig = Math.atan2(sinS, cosS);
+    const sinA = cU1 * cU2 * sl / sinS; cos2A = 1 - sinA * sinA;
+    cos2Sm = cos2A ? cosS - 2 * sU1 * sU2 / cos2A : 0;
+    const C = f / 16 * cos2A * (4 + f * (4 - 3 * cos2A));
+    lamP = lam; lam = L + (1 - C) * f * sinA * (sig + C * sinS * (cos2Sm + C * cosS * (2 * cos2Sm * cos2Sm - 1)));
+  } while (Math.abs(lam - lamP) > 1e-12 && ++it < 200);
+  const u2 = cos2A * (a * a - b * b) / (b * b);
+  const A = 1 + u2 / 16384 * (4096 + u2 * (-768 + u2 * (320 - 175 * u2))), B = u2 / 1024 * (256 + u2 * (-128 + u2 * (74 - 47 * u2)));
+  const dS = B * sinS * (cos2Sm + B / 4 * (cosS * (2 * cos2Sm * cos2Sm - 1) - B / 6 * cos2Sm * (4 * sinS * sinS - 3) * (4 * cos2Sm * cos2Sm - 3)));
+  const sl = Math.sin(lam), cl = Math.cos(lam);
+  return { d: b * A * (sig - dS), az: (Math.atan2(cU2 * sl, cU1 * sU2 - sU1 * cU2 * cl) / rad + 360) % 360 };
+}
+// UTM point-scale factor from easting (k0 = 0.9996), accurate to ~1e-7 over a reservoir
+const utmK = E => { const x = (E - 500000) / 0.9996, R = 6.37e6; return 0.9996 * (1 + x * x / (2 * R * R) + x ** 4 / (24 * R ** 4)); };
+const measClosed = () => MEAS.mode === 'poly' && MEAS.pts.length >= 3;
+function measStats(pts = MEAS.pts, closed = measClosed()) {
+  const ll = pts.map(([x, y]) => { const [lo, la] = utmToLL(x, y, ZONE); return [la, lo]; });
+  const segs = []; let tot = 0, grid = 0;
+  const m = closed ? pts.length : pts.length - 1;
+  for (let i = 0; i < m; i++) {
+    const j = (i + 1) % pts.length, v = vincenty(ll[i][0], ll[i][1], ll[j][0], ll[j][1]), g = Math.hypot(pts[j][0] - pts[i][0], pts[j][1] - pts[i][1]);
+    segs.push({ d: v.d, az: v.az, g }); tot += v.d; grid += g;
+  }
+  let area = null, areaGrid = null;
+  if (closed) {
+    let s = 0, k2 = 0;
+    for (let i = 0; i < pts.length; i++) { const p = pts[i], q = pts[(i + 1) % pts.length]; s += p[0] * q[1] - q[0] * p[1]; k2 += utmK(p[0]) ** 2; }
+    areaGrid = Math.abs(s) / 2; area = areaGrid / (k2 / pts.length);
+  }
+  return { ll, segs, tot, grid, area, areaGrid };
+}
+function measHint() {
+  const n = MEAS.pts.length, m = MEAS.mode, touch = matchMedia('(pointer: coarse)').matches;
+  if (MEAS.done) return 'ลากจุดเพื่อแก้ตำแหน่ง · ' + (touch ? 'แตะ' : 'คลิก') + 'ที่อื่นเพื่อเริ่มวัดใหม่';
+  if (!n) return (touch ? 'แตะ' : 'คลิก') + 'บนแผนที่เพื่อวางจุดแรก · ลากเพื่อเลื่อนแผนที่ได้ตามปกติ';
+  if (m === 'line') return (touch ? 'แตะ' : 'คลิก') + 'จุดที่สอง';
+  if (m === 'path') return n < 2 ? (touch ? 'แตะ' : 'คลิก') + 'จุดถัดไป' : (touch ? 'แตะจุดสุดท้ายซ้ำ' : 'ดับเบิลคลิก, คลิกจุดสุดท้ายซ้ำ หรือกด Enter') + ' เพื่อจบเส้น';
+  return n < 3 ? (touch ? 'แตะ' : 'คลิก') + 'จุดถัดไป (อย่างน้อย 3 จุด)' : (touch ? 'แตะจุดแรกเพื่อปิดรูป' : 'คลิกจุดแรก ดับเบิลคลิก หรือกด Enter เพื่อปิดรูป');
+}
+function measRender() {
+  const S = MEAS.stats = MEAS.pts.length ? measStats() : null, poly = MEAS.mode === 'poly';
+  const n = MEAS.pts.length, [lv, lu] = lenParts(S ? S.tot : 0);
+  $('measK').textContent = poly ? 'เส้นรอบรูป' : MEAS.mode === 'path' ? 'ระยะรวม' : 'ระยะทาง';
+  $('measV').innerHTML = n >= 2 ? lv + '<small>' + lu + '</small>' : '—';
+  $('measAreaRow').hidden = !poly; $('measAU').hidden = !poly; $('measU').classList.toggle('one', !poly);
+  if (poly) $('measA').textContent = S && S.area != null ? areaParts(S.area).long : '—';
+  let sub = '';
+  if (S && n >= 2) {
+    if (MEAS.mode === 'line') sub = 'ทิศ ' + S.segs[0].az.toFixed(1) + '° (' + compass(S.segs[0].az) + ') จากเหนือจริง · กริด UTM ' + nf(S.grid, 1) + ' m';
+    else sub = n + ' จุด · ' + S.segs.length + ' ช่วง · กริด UTM ' + nf(S.grid, 1) + ' m' + (poly && S.areaGrid != null ? ' · ' + nf(S.areaGrid, 0) + ' m²' : '');
+  } else if (n === 1) sub = '1 จุด · E ' + fmtInt(MEAS.pts[0][0]) + ' N ' + fmtInt(MEAS.pts[0][1]);
+  $('measSub').textContent = sub;
+  $('measHint').textContent = measHint();
+  $('measDone').hidden = MEAS.done || MEAS.mode === 'line' || n < (poly ? 3 : 2);
+  $('measUndo').disabled = !n; $('measClear').disabled = !n; $('measCopy').disabled = n < 2;
+  document.querySelectorAll('#measMode button').forEach(b => b.setAttribute('aria-pressed', b.dataset.m === MEAS.mode));
+  scheduleDraw();
+}
+function measSet(on) {
+  MEAS.on = on; $('measBtn').setAttribute('aria-pressed', on); $('meas').hidden = !on; cv.classList.toggle('measuring', on); $('app').classList.toggle('measuring', on);
+  if (on) { $('hint').hidden = true; hidePop(true); } else { MEAS.pts = []; MEAS.done = false; MEAS.hover = null; }
+  measRender();
+}
+function measFinish() {
+  const need = MEAS.mode === 'poly' ? 3 : 2;
+  if (MEAS.pts.length < need) { toast(MEAS.mode === 'poly' ? 'พื้นที่ต้องมีอย่างน้อย 3 จุด' : 'ต้องมีอย่างน้อย 2 จุด'); return; }
+  MEAS.done = true; MEAS.hover = null; measRender();
+}
+function measUndo() { if (!MEAS.pts.length) return; MEAS.pts.pop(); MEAS.done = false; measRender(); }
+function measClear() { MEAS.pts = []; MEAS.done = false; MEAS.hover = null; measRender(); }
+function measHit(px, py, tol) {
+  let bi = -1, bd = tol;
+  MEAS.pts.forEach((p, i) => { const [sx, sy] = toScreen(p[0], p[1]), d = Math.hypot(sx - px, sy - py); if (d <= bd) { bd = d; bi = i; } });
+  return bi;
+}
+const measTol = e => (e && e.pointerType === 'touch' ? 20 : 10);
+function measTap(px, py, e) {
+  const w = toWorld(px, py), n = MEAS.pts.length, tol = measTol(e);
+  const near = i => { const [sx, sy] = toScreen(...MEAS.pts[i]); return Math.hypot(sx - px, sy - py) <= tol; };
+  if (MEAS.done) { MEAS.pts = [w]; MEAS.done = false; }
+  else if (MEAS.mode === 'line') { if (n === 1 && near(0)) return; MEAS.pts.push(w); if (MEAS.pts.length === 2) MEAS.done = true; }
+  else if (MEAS.mode === 'poly' && n >= 3 && near(0)) MEAS.done = true;
+  else if (n >= (MEAS.mode === 'poly' ? 3 : 2) && near(n - 1)) MEAS.done = true;
+  else if (n && near(n - 1)) return;
+  else MEAS.pts.push(w);
+  if (MEAS.done) MEAS.hover = null;
+  measRender();
+}
+function measTSV() {
+  const S = measStats(), poly = measClosed(), r = RES[st.res];
+  const head = '# FPV Wave Estimator · measure · ' + r.th + ' (' + r.code + ') · UTM ' + ZONE + 'N · ' + { line: 'line', path: 'polyline', poly: 'polygon' }[MEAS.mode] + ' · geodesic WGS84 (Vincenty)';
+  const lines = [head, 'Point\tE\tN\tLat\tLon\tSegment_to_next_m\tAzimuth_deg\tCumulative_m'];
+  let cum = 0;
+  MEAS.pts.forEach((p, i) => {
+    const sg = S.segs[i];
+    lines.push([i + 1, p[0].toFixed(2), p[1].toFixed(2), S.ll[i][0].toFixed(7), S.ll[i][1].toFixed(7), sg ? sg.d.toFixed(3) : '', sg ? sg.az.toFixed(2) : '', cum.toFixed(3)].join('\t'));
+    if (sg) cum += sg.d;
+  });
+  lines.push('', (poly ? 'Perimeter' : 'Total length') + '_m\t' + S.tot.toFixed(3), 'UTM grid length_m\t' + S.grid.toFixed(3));
+  if (poly) lines.push('Area_m2\t' + S.area.toFixed(2), 'Area_rai\t' + (S.area / 1600).toFixed(4), 'Area (rai-ngan-wa)\t' + areaParts(S.area, 'rngw').short, 'Area_ha\t' + (S.area / 1e4).toFixed(4), 'UTM grid area_m2\t' + S.areaGrid.toFixed(2));
+  return lines.join('\n');
+}
+// rounded label pill on the map; returns its box so callers can skip overlapping labels
+function mapPill(text, x, y, opt = {}) {
+  ctx.font = (opt.big ? '600 12.5px ' : '500 11px ') + '"JetBrains Mono", "Noto Sans Thai", ui-monospace, monospace';
+  const w = ctx.measureText(text).width + 14, h = opt.big ? 23 : 19, bx = Math.round(x - w / 2), by = Math.round(y - h / 2);
+  ctx.beginPath(); ctx.roundRect ? ctx.roundRect(bx, by, w, h, h / 2) : ctx.rect(bx, by, w, h);
+  ctx.fillStyle = 'rgba(10,10,10,0.88)'; ctx.fill(); ctx.lineWidth = 1; ctx.strokeStyle = opt.stroke || 'rgba(255,255,255,0.18)'; ctx.stroke();
+  ctx.fillStyle = opt.ink || '#FAFAFA'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(text, bx + w / 2, by + h / 2 + 0.5);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  return [bx, by, bx + w, by + h];
+}
+const boxHit = (a, list) => list.some(b => a[0] < b[2] + 4 && a[2] + 4 > b[0] && a[1] < b[3] + 3 && a[3] + 3 > b[1]);
+function drawMeas() {
+  if (!MEAS.on || !MEAS.pts.length) return;
+  const P = MEAS.pts.map(p => toScreen(p[0], p[1])), poly = MEAS.mode === 'poly', S = MEAS.stats;
+  const live = !MEAS.done && MEAS.hover ? toScreen(...MEAS.hover) : null;
+  const closeIt = poly && (MEAS.done || P.length >= 3);
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  if (poly && (P.length + (live ? 1 : 0)) >= 3) {
+    ctx.beginPath(); P.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); if (live) ctx.lineTo(...live); ctx.closePath();
+    ctx.fillStyle = MEAS_FILL; ctx.fill();
+  }
+  const trace = () => { ctx.beginPath(); P.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); if (closeIt && !live) ctx.closePath(); };
+  trace(); ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 5; ctx.stroke();
+  trace(); ctx.strokeStyle = MEAS_COL; ctx.lineWidth = 2.2; ctx.stroke();
+  if (live) {
+    ctx.setLineDash([6, 5]); ctx.strokeStyle = MEAS_COL; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(...P[P.length - 1]); ctx.lineTo(...live); if (poly && P.length >= 2) ctx.lineTo(...P[0]); ctx.stroke(); ctx.setLineDash([]);
+  }
+  // vertices (the first one gets a ring while a polygon can be closed on it)
+  P.forEach(([x, y], i) => {
+    ctx.beginPath(); ctx.arc(x, y, i === MEAS.drag ? 6 : 4.5, 0, 7); ctx.fillStyle = '#0A0A0A'; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = MEAS_COL; ctx.stroke();
+    if (i === 0 && poly && !MEAS.done && P.length >= 3) { ctx.beginPath(); ctx.arc(x, y, 9, 0, 7); ctx.lineWidth = 1.2; ctx.stroke(); }
+  });
+  // labels: the total / area first, then one per segment where there is room and no overlap
+  const boxes = [];
+  if (S && P.length >= 2 && MEAS.mode === 'line') {
+    const a = P[0], b = P[1];
+    boxes.push(mapPill(fmtLen(S.tot) + ' · ' + S.segs[0].az.toFixed(1) + '°', (a[0] + b[0]) / 2, (a[1] + b[1]) / 2 - 16, { big: true, stroke: MEAS_COL }));
+  }
+  if (S && MEAS.mode === 'path' && S.segs.length > 1) {
+    const [x, y] = P[P.length - 1]; boxes.push(mapPill('รวม ' + fmtLen(S.tot), x, y - 20, { big: true, stroke: MEAS_COL }));
+  }
+  if (S && poly && S.area != null) {
+    let cx = 0, cy = 0; P.forEach(([x, y]) => { cx += x; cy += y; });
+    boxes.push(mapPill(areaParts(S.area).short, cx / P.length, cy / P.length, { big: true, stroke: MEAS_COL }));
+  }
+  if (S && MEAS.mode !== 'line') S.segs.forEach((sg, i) => {
+    const a = P[i], b = P[(i + 1) % P.length], L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const t = fmtLen(sg.d); ctx.font = '500 11px ' + FONT_MONO;
+    const w = ctx.measureText(t).width + 14, mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+    if (L < w + 12 || boxHit([mx - w / 2, my - 10, mx + w / 2, my + 10], boxes)) return;
+    boxes.push(mapPill(t, mx, my));
+  });
+  if (live && P.length) {
+    const [lo1, la1] = utmToLL(...MEAS.pts[MEAS.pts.length - 1], ZONE), [lo2, la2] = utmToLL(...MEAS.hover, ZONE);
+    const d = vincenty(la1, lo1, la2, lo2);
+    let t = fmtLen(d.d) + ' · ' + d.az.toFixed(0) + '°';
+    if (MEAS.mode !== 'line' && P.length > 1) t += ' · รวม ' + fmtLen((S ? S.tot - (closeIt ? S.segs[S.segs.length - 1].d : 0) : 0) + d.d);
+    if (poly && P.length >= 2) { const s2 = measStats([...MEAS.pts, MEAS.hover], true); t = fmtLen(d.d) + ' · ' + areaParts(s2.area).short; }
+    mapPill(t, live[0], live[1] + 22);
+  }
+}
+$('measBtn').onclick = () => measSet(!MEAS.on);
+$('measX').onclick = () => measSet(false);
+$('measDone').onclick = measFinish;
+$('measUndo').onclick = measUndo;
+$('measClear').onclick = measClear;
+$('measUnits').onclick = () => { const on = !$('meas').classList.contains('units'); $('meas').classList.toggle('units', on); $('measUnits').setAttribute('aria-pressed', on); };
+$('measCopy').onclick = () => { if (MEAS.pts.length >= 2) copyText(measTSV(), null, $('measFallback'), 'คัดลอกพิกัดและระยะแล้ว วางใน Excel ได้'); };
+document.querySelectorAll('#measMode button').forEach(b => b.onclick = () => {
+  if (MEAS.mode === b.dataset.m) return;
+  const keep = MEAS.pts.slice(0, b.dataset.m === 'line' ? 2 : undefined);
+  MEAS.mode = b.dataset.m; MEAS.pts = keep;
+  MEAS.done = MEAS.pts.length >= (MEAS.mode === 'poly' ? 3 : 2) && (MEAS.mode === 'line' || MEAS.done);
+  saveMeasPrefs(); measRender();
+});
+function saveMeasPrefs() { lsSet('fwe-meas', { mode: MEAS.mode, lu: MEAS.lu, au: MEAS.au }); }
+$('measLU').onchange = () => { MEAS.lu = $('measLU').value; saveMeasPrefs(); measRender(); };
+$('measAU').onchange = () => { MEAS.au = $('measAU').value; saveMeasPrefs(); measRender(); };
+{ const p = lsGet('fwe-meas'); if (p) { if (p.mode && ['line', 'path', 'poly'].includes(p.mode)) MEAS.mode = p.mode; if (p.lu && (p.lu === 'auto' || LEN_U[p.lu])) MEAS.lu = p.lu; if (p.au && (p.au === 'rngw' || AREA_U[p.au])) MEAS.au = p.au; } $('measLU').value = MEAS.lu; $('measAU').value = MEAS.au; }
+addEventListener('keydown', e => {
+  if (!MEAS.on || !$('repModal').hidden || !$('capModal').hidden) return;
+  const t = e.target; if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+  if (e.key === 'Enter') { if (!MEAS.done && MEAS.pts.length) { measFinish(); e.preventDefault(); } }
+  else if (e.key === 'Backspace' || e.key === 'Delete') { measUndo(); e.preventDefault(); }
+  else if (e.key === 'Escape') { if (!MEAS.done && MEAS.pts.length) measClear(); else measSet(false); }
+});
 
 // boot
 mobileMQ.addEventListener && mobileMQ.addEventListener('change', () => { if (mobileMQ.matches && $('app').dataset.panel === 'max') setPanel('normal'); });

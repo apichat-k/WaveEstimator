@@ -162,6 +162,57 @@ select.chip { padding: 0 10px; width: auto; }
 .lg { width: 16px; height: 4px; border-radius: 2px; flex: none; }
 .lg.ok { background: var(--success); } .lg.near { background: var(--warning); } .lg.over { background: var(--error); }
 .lg.na { background: repeating-linear-gradient(90deg, var(--muted) 0 3px, transparent 3px 6px); }
+.lg.base { background: rgba(161, 161, 161, 0.55); }
+.legend em { color: var(--ink); }
+
+/* measure tool card (sits on its own row under the map chips) */
+.mapbar > .mrow { flex-basis: 100%; pointer-events: none; display: flex; }
+.meas {
+  pointer-events: auto; width: 312px; max-width: 100%; margin-top: 2px; background: var(--card); border-radius: 11.2px; box-shadow: var(--shadow);
+  padding: 12px 14px 12px; display: flex; flex-direction: column; gap: 8px;
+}
+.meas-h { display: flex; align-items: center; gap: 6px; }
+.meas-h .seg { flex: 1; }
+.seg.sm button { height: 30px; font-size: 12.5px; padding: 0 8px; }
+.meas-n { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.meas-n .k { font: 500 10px/1.55 var(--font-mono); letter-spacing: 0.5px; color: var(--muted); text-transform: uppercase; flex: none; }
+.meas-n .v { font: 600 22px/1.15 var(--font-display); letter-spacing: -0.5px; font-variant-numeric: tabular-nums; text-align: right; min-width: 0; overflow-wrap: anywhere; }
+.meas-n .v small { font: 400 12px var(--font-sans); color: var(--muted); letter-spacing: 0; margin-left: 3px; }
+.meas-sub, .meas-hint { margin: 0; font: 400 11px/1.5 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.meas-hint { color: var(--ink); font-family: var(--font-sans); font-size: 12px; }
+.meas-u { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.meas-u select { height: 32px; font-size: 12.5px; }
+.meas-u.one { grid-template-columns: 1fr; }
+.meas .btnrow { gap: 4px; }
+.meas .btn.sm { height: 30px; padding: 0 12px; font-size: 12.5px; }
+#measUnits { display: none; }
+@media (max-width: 900px) {
+  .app.measuring .mapwrap { height: 78vh; }
+  .meas { width: 100%; padding: 10px 12px; gap: 6px; }
+  .meas-sub { display: none; }
+  .meas-u { display: none; }
+  .meas.units .meas-u { display: grid; }
+  #measUnits { display: inline-flex; }
+  #measUnits[aria-pressed="true"] { background: var(--hover); color: var(--ink); }
+  .meas-n .v { font-size: 19px; }
+}
+#map.measuring { cursor: crosshair; }
+#map.onvert { cursor: grab; }
+
+/* wave breaker summary */
+.wbrow { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; }
+.wbrow .seg { flex: none; }
+.wbgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); border: 1px solid var(--hair); border-radius: 8px; overflow: hidden; }
+.wbk { padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; min-width: 0; box-shadow: -1px 0 0 var(--hair), 0 -1px 0 var(--hair); }
+.wbk .k { font: 500 10px/1.55 var(--font-mono); letter-spacing: 0.5px; color: var(--muted); text-transform: uppercase; }
+.wbk .v { font: 600 32px/1.05 var(--font-display); letter-spacing: -1px; font-variant-numeric: tabular-nums; }
+.wbk .v small { font: 400 14px var(--font-sans); color: var(--muted); letter-spacing: 0; margin-left: 2px; }
+.wbk .v.none { font: 500 15px/1.6 var(--font-sans); letter-spacing: 0; color: var(--success); }
+.wbk .s { font: 400 11px/1.5 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.nocase { text-transform: none; }
+.wbtbl td .sw { display: inline-block; width: 16px; height: 5px; border-radius: 2px; margin-right: 8px; vertical-align: middle; }
+.wbdef { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.wbdef select { height: 32px; font-size: 12.5px; width: auto; flex: 1; min-width: 0; }
 
 /* minimised panel → floating result card */
 .mini {
@@ -351,6 +402,50 @@ textarea.fallback { width: 100%; height: 90px; font: 400 11px var(--font-mono); 
           </select>
           <button class="chip" id="lblToggle" aria-pressed="false" title="แสดงชื่อสถานที่"><span class="sw"></span>ชื่อสถานที่</button>
         </span>
+        <button class="chip" id="measBtn" aria-pressed="false" title="วัดระยะทางและพื้นที่บนแผนที่"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M1.8 11.2 11.2 1.8l3 3-9.4 9.4z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M4.4 8.6l1.4 1.4M6.4 6.6l2 2M8.4 4.6l1.4 1.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>วัดระยะ</button>
+        <div class="mrow">
+          <div class="meas" id="meas" hidden role="region" aria-label="เครื่องมือวัดระยะ">
+            <div class="meas-h">
+              <div class="seg sm" id="measMode" role="group" aria-label="แบบการวัด">
+                <button data-m="line" aria-pressed="true">เส้นตรง</button>
+                <button data-m="path" aria-pressed="false">หลายเส้น</button>
+                <button data-m="poly" aria-pressed="false">พื้นที่</button>
+              </div>
+              <button class="iconbtn" id="measX" aria-label="ปิดเครื่องมือวัด" title="ปิดเครื่องมือวัด" style="width:30px;height:30px">×</button>
+            </div>
+            <div class="meas-n"><span class="k" id="measK">ระยะทาง</span><span class="v" id="measV">—</span></div>
+            <div class="meas-n" id="measAreaRow" hidden><span class="k">พื้นที่</span><span class="v" id="measA">—</span></div>
+            <div class="meas-sub" id="measSub"></div>
+            <div class="meas-u" id="measU">
+              <select id="measLU" aria-label="หน่วยความยาว">
+                <option value="auto">m / km อัตโนมัติ</option>
+                <option value="m">เมตร (m)</option>
+                <option value="km">กิโลเมตร (km)</option>
+                <option value="wa">วา</option>
+                <option value="ft">ฟุต (ft)</option>
+                <option value="mi">ไมล์ (mi)</option>
+                <option value="nmi">ไมล์ทะเล (NM)</option>
+              </select>
+              <select id="measAU" aria-label="หน่วยพื้นที่" hidden>
+                <option value="rngw">ไร่-งาน-ตร.วา</option>
+                <option value="rai">ไร่</option>
+                <option value="m2">ตารางเมตร (m²)</option>
+                <option value="ha">เฮกตาร์ (ha)</option>
+                <option value="km2">ตร.กม. (km²)</option>
+                <option value="ac">เอเคอร์ (acre)</option>
+              </select>
+            </div>
+            <div class="btnrow">
+              <button class="btn primary sm" id="measDone" hidden>จบ</button>
+              <button class="btn ghost sm" id="measUndo">ย้อนจุด</button>
+              <button class="btn ghost sm" id="measClear">ล้าง</button>
+              <button class="btn ghost sm" id="measCopy">คัดลอก</button>
+              <button class="btn ghost sm" id="measUnits" aria-pressed="false">หน่วย</button>
+            </div>
+            <textarea class="fallback" id="measFallback" hidden readonly aria-label="ข้อมูลการวัด"></textarea>
+            <p class="meas-hint" id="measHint">คลิกบนแผนที่เพื่อวางจุดแรก</p>
+          </div>
+        </div>
       </div>
       <div class="hint" id="hint">คลิกบนผิวน้ำเพื่อเลือกจุด · ลากเพื่อเลื่อน · scroll/pinch เพื่อซูม</div>
       <div class="legend" id="legend" hidden>
@@ -543,7 +638,7 @@ textarea.fallback { width: 100%; height: 90px; font: 400 11px var(--font-mono); 
             <div class="acc-b">
               <div class="tblwrap">
                 <table>
-                  <thead><tr><th>วิธี</th><th>F (km)</th><th>Hs (m)</th><th>H<sub>d</sub> (m)</th><th>T (s)</th><th>t<sub>min</sub> (h)</th></tr></thead>
+                  <thead><tr><th>วิธี</th><th>F <span class="nocase">(km)</span></th><th>Hs <span class="nocase">(m)</span></th><th>H<sub>d</sub> <span class="nocase">(m)</span></th><th>T <span class="nocase">(s)</span></th><th>t<sub>min</sub> <span class="nocase">(h)</span></th></tr></thead>
                   <tbody id="cmpBody"></tbody>
                 </table>
               </div>
@@ -588,7 +683,7 @@ textarea.fallback { width: 100%; height: 90px; font: 400 11px var(--font-mono); 
               <textarea class="fallback" id="tsvFallback" hidden readonly></textarea>
               <div class="tblwrap radtbl">
                 <table>
-                  <thead><tr><th>ทิศ (°)</th><th>รัศมี (km)</th><th>F<sub>eff</sub> (km)</th><th>Hs (m)</th><th>T (s)</th></tr></thead>
+                  <thead><tr><th>ทิศ <span class="nocase">(°)</span></th><th>รัศมี <span class="nocase">(km)</span></th><th>F<sub>eff</sub> <span class="nocase">(km)</span></th><th>Hs <span class="nocase">(m)</span></th><th>T <span class="nocase">(s)</span></th></tr></thead>
                   <tbody id="radBody"></tbody>
                 </table>
               </div>
@@ -606,12 +701,14 @@ textarea.fallback { width: 100%; height: 90px; font: 400 11px var(--font-mono); 
                 <li><b>คลื่น</b> H<sub>s</sub> จาก DS-13 Eq.2 และ T<sub>p</sub> จาก Eq.3 ในทิศที่ให้ fetch ยาวที่สุดตามโหมดทิศที่เลือก</li>
                 <li><b>H<sub>max</sub></b> = 1.67 H<sub>s</sub> คือความสูงเฉลี่ยของคลื่น 1% ที่สูงที่สุด (มีคลื่นสูงกว่าค่านี้ราว 0.4%) ตาม DS-13 Table B-2</li>
                 <li><b>ตรวจตามแนวขอบ</b> แบ่งเส้นรอบรูปของ Project Boundary และแพแต่ละแพเป็นช่วงตามระยะที่เลือก ทำข้อ 2–5 ที่กึ่งกลางทุกช่วง โดยนับเฉพาะลมที่พัดเข้าหาด้านนอก (ถ้าเลือก) แล้วเทียบ H<sub>s</sub> กับค่าที่รับได้: เขียว &lt; 90%, ส้ม 90–100%, แดงเกิน · ช่วงที่กึ่งกลางอยู่บนบกจะไม่ตรวจ</li>
+                <li><b>Wave Breaker</b> ช่วงที่ H<sub>s</sub> เกินค่าที่รับได้ ต้องลดคลื่นให้เหลือไม่เกินค่าที่รับได้ จึงต้องการสัมประสิทธิ์การส่งผ่าน K<sub>t</sub> = H<sub>t</sub>/H<sub>i</sub> ≤ H<sub>s,รับได้</sub>/H<sub>s</sub> และประสิทธิภาพ η = 1 − K<sub>t</sub> (ลดความสูงคลื่น) หรือ 1 − K<sub>t</sub><sup>2</sup> (ลดพลังงานคลื่น) ปัดขึ้นเป็นจำนวนเต็ม % · ประสิทธิภาพของ WB ลอยน้ำขึ้นกับคาบคลื่น จึงแสดง T<sub>p</sub> และ L<sub>0</sub> ของคลื่นออกแบบไว้ให้เทียบกับกราฟ K<sub>t</sub> ของผู้ผลิต</li>
+                <li><b>วัดระยะ</b> ระยะทางคำนวณบนทรงรี WGS84 (Vincenty) ทิศเป็นมุมจากทิศเหนือจริง พื้นที่คำนวณจากพิกัด UTM แล้วปรับด้วย scale factor ของ UTM ให้เป็นพื้นที่จริงบนพื้นผิว (1 ไร่ = 1,600 m², 1 งาน = 400 m², 1 ตร.วา = 4 m²)</li>
               </ol>
               <p><b>สมการ DS-13 (F เป็น mile, V เป็น mph, H เป็น ft):</b> <code>tmin = 1.87·F^0.67 / V^0.34</code> (ชม.) · <code>Hs = 0.0245·F^0.5·V·(1.1+0.0156V)^0.5</code> · <code>T = 0.464·F^(1/3)·V^(1/3)·(1.1+0.0156V)^(1/6)</code> · <code>L0 = gT²/2π</code> · ปรับช่วงเวลาลม (CEM): <code>Ut/U3600 = 1.277 + 0.296·tanh(0.9·log(45/t))</code> เมื่อ t &lt; 1 ชม. และ <code>−0.15·log t + 1.5334</code> เมื่อ t ≥ 1 ชม.</p>
               <p><b>ข้อจำกัด:</b> ใช้ได้กับน้ำลึก (ความลึก &gt; L<sub>0</sub>/2) ไม่รวมการหักเห การเลี้ยวเบน การสะท้อน และคลื่นที่ลอดใต้แพ ผลขึ้นกับระดับน้ำของเส้นขอบอ่าง ถ้ามีเส้นขอบที่ระดับน้ำออกแบบ ควรใช้เส้นนั้นแทน</p>
               <p><b>ตรวจข้อมูลแต่ละอ่าง</b> (แถวที่เน้นคืออ่างที่เปิดอยู่)</p>
               <div class="tblwrap"><table class="vtbl">
-                <thead><tr><th>อ่าง</th><th>UTM</th><th>พื้นที่ไฟล์ (km²)</th><th>อ้างอิง (km²)</th><th>ต่าง</th><th>เขื่อนถึงขอบน้ำ</th><th>ลมตั้งต้น</th></tr></thead>
+                <thead><tr><th>อ่าง</th><th>UTM</th><th>พื้นที่ไฟล์ <span class="nocase">(km²)</span></th><th>อ้างอิง <span class="nocase">(km²)</span></th><th>ต่าง</th><th>เขื่อนถึงขอบน้ำ</th><th>ลมตั้งต้น</th></tr></thead>
                 <tbody id="verBody"></tbody>
               </table></div>
               <p id="verNote"></p>
