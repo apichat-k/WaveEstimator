@@ -39,8 +39,8 @@ const RES = {
     ],
   },
   VRK: { th: 'อ่างเก็บน้ำเขื่อนวชิราลงกรณ', short: 'วชิราลงกรณ', code: 'VRK-PV1', zone: 47, prj: 'VRK', gust: 140, gustSrc: null, presets: [] },
-  UBR: { th: 'อ่างเก็บน้ำเขื่อนอุบลรัตน์', short: 'อุบลรัตน์', code: 'UR-PV', zone: 48, prj: null, gust: 140, gustSrc: null, presets: [] },
-  SRD: { th: 'อ่างเก็บน้ำเขื่อนสิรินธร', short: 'สิรินธร', code: 'SRD-PV', zone: 48, prj: null, gust: 150, gustSrc: null, presets: [] },
+  UBR: { th: 'อ่างเก็บน้ำเขื่อนอุบลรัตน์', short: 'อุบลรัตน์', code: 'UR-PV', zone: 48, prj: 'UBR', gust: 140, gustSrc: null, presets: [] },
+  SRD: { th: 'อ่างเก็บน้ำเขื่อนสิรินธร', short: 'สิรินธร', code: 'SRD-PV', zone: 48, prj: 'SRD', gust: 150, gustSrc: null, presets: [] },
 };
 const RES_ORDER = ['BB', 'SNR', 'VRK', 'UBR', 'SRD'];
 
@@ -608,11 +608,11 @@ function setPvCfg(id) {
 }
 function buildProjectLayers() {
   const key = RES[st.res].prj;
-  st.prjLayers = []; st.pvRings = []; st.pvS = new Float64Array(0);
+  st.prjLayers = []; st.pvRings = []; st.pvS = new Float64Array(0); st.pvIX = null;
   if (!key) return;
   const P = PROJECTS[key], vis = lsGet('fwe-prjvis') || {};
   const mk = f => { f.rings = f.ll.map(toUTMpts); f.label = centroid(f.rings[0]); return f; };
-  const bnd = { id: 'prj-bnd', role: 'bnd', name: 'Project Boundary', vis: vis.bnd !== false, feats: P.bnd.map(r => mk({ name: 'Project Boundary', ll: [r], open: P.bndOpen })) };
+  const bnd = { id: 'prj-bnd', role: 'bnd', name: 'Project Boundary', vis: vis.bnd !== false, feats: P.bnd.map((r, i) => mk({ name: 'Project Boundary' + (P.bnd.length > 1 ? ' ' + (i + 1) : ''), short: 'Boundary' + (P.bnd.length > 1 ? ' ' + (i + 1) : ''), ll: [r], open: P.bndOpen })) };
   const cfg = pvCfg(key), pvData = cfg ? P[cfg.key] : P.pv;
   const blocks = orderBlocks(key, pvData.map(r => ({ r, c: centroid(r) })));
   const pv = { id: 'prj-pv', role: 'pv', name: 'PV Array' + (cfg ? ' (' + cfg.name + ')' : ''), vis: vis.pv !== false, feats: blocks.map((b, i) => mk({ name: 'แพ ' + (i + 1), short: String(i + 1), ll: [b.r] })) };
@@ -620,6 +620,10 @@ function buildProjectLayers() {
   st.prjLayers = [bnd, pv];
   st.pvRings = pv.feats.map(f => f.rings[0]);
   st.pvS = segsFromXY(st.pvRings);
+  st.pvIX = st.pvS.length ? buildIndex(st.pvS, 150) : null;   // grid index: layouts with ~90 blocks stay fast to ray-cast
+  const bx = st.pvRings.map(r => { const xs = r.map(q => q[0]), ys = r.map(q => q[1]); return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]; });
+  st.pvTouch = 0;
+  for (let i = 0; i < bx.length; i++) for (let j = i + 1; j < bx.length; j++) if (bx[i][0] <= bx[j][2] + 1 && bx[j][0] <= bx[i][2] + 1 && bx[i][1] <= bx[j][3] + 1 && bx[j][1] <= bx[i][3] + 1) st.pvTouch++;
 }
 function prjBBox() {
   if (!st.prjLayers.length) return null;
@@ -647,8 +651,14 @@ function renderPrjCard() {
     li.append(cb, sw, nm, ct); ul.appendChild(li);
   });
   const nt = $('prjNote');
-  nt.hidden = !P.bndOpen && st.res !== 'BB';
-  nt.textContent = (P.bndOpen ? 'เส้น Project Boundary ในไฟล์ไม่ปิดรูปฝั่งที่ติดตลิ่ง แอปแสดงเส้นปิดเป็นเส้นจาง แต่ไม่นำเส้นปิดนั้นมาตรวจ ' : '') + (st.res === 'BB' ? 'แพของ BB-PV นับเลขจากขวาไปซ้าย (คอลัมน์เดียวกันนับจากเหนือลงใต้)' : '');
+  const notes = [];
+  if (P.bndOpen) notes.push('เส้น Project Boundary ในไฟล์ไม่ปิดรูปฝั่งที่ติดตลิ่ง แอปแสดงเส้นปิดเป็นเส้นจาง แต่ไม่นำเส้นปิดนั้นมาตรวจ');
+  if (P.bnd.length > 1) notes.push('Project Boundary มี ' + P.bnd.length + ' พื้นที่ นับเลขจากเหนือลงใต้');
+  if (st.res === 'BB') notes.push('แพของ BB-PV นับเลขจากขวาไปซ้าย (คอลัมน์เดียวกันนับจากเหนือลงใต้)');
+  else if (st.pvRings.length) notes.push('แพนับเลขจากเหนือลงใต้ทีละแถว ในแถวเดียวกันนับจากตะวันตกไปตะวันออก');
+  if (st.pvTouch) notes.push('แพที่วางติดกันมีขอบร่วม ขอบร่วมนี้อยู่ภายในกลุ่มแพ ไม่ใช่ขอบที่รับคลื่น จึงไม่ตรวจ');
+  nt.hidden = !notes.length;
+  nt.textContent = notes.join(' · ');
   updateLayVal();
 }
 function updateLayVal() { const v = st.prjLayers.filter(L => L.vis).map(L => L.role === 'pv' ? 'PV ' + L.feats.length + ' แพ' : 'Boundary'); $('vLay').textContent = (v.join(' · ') || 'ซ่อนผังโครงการ') + (STANDALONE && BM.on ? ' · ดาวเทียม' : ''); }
@@ -757,9 +767,32 @@ function makePieces(step) {
   }
   return { pieces, targets };
 }
+function segDist(x, y, r) {
+  let best = Infinity;
+  for (let i = 0; i < r.length; i++) {
+    const a = r[i], b = r[(i + 1) % r.length], ex = b[0] - a[0], ey = b[1] - a[1], l2 = ex * ex + ey * ey;
+    const t = l2 ? Math.max(0, Math.min(1, ((x - a[0]) * ex + (y - a[1]) * ey) / l2)) : 0;
+    best = Math.min(best, Math.hypot(x - a[0] - t * ex, y - a[1] - t * ey));
+  }
+  return best;
+}
+// a PV edge piece that lies on (≤ 1 m) or inside a neighbouring block is a shared edge inside the array, not a perimeter facing water
+function onOtherBlock(pc) {
+  if (pc.tg.role !== 'pv') return false;
+  const own = pc.tg.f.rings[0];
+  for (const r of st.pvRings) {
+    if (r === own) continue;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const q of r) { if (q[0] < x0) x0 = q[0]; if (q[0] > x1) x1 = q[0]; if (q[1] < y0) y0 = q[1]; if (q[1] > y1) y1 = q[1]; }
+    if (pc.x < x0 - 1 || pc.x > x1 + 1 || pc.y < y0 - 1 || pc.y > y1 + 1) continue;
+    if (pip(pc.x, pc.y, [r]) || segDist(pc.x, pc.y, r) <= 1) return true;
+  }
+  return false;
+}
 function evalPiece(pc, P) {
+  if (onOtherBlock(pc)) { pc.status = 'inner'; return; }
   if (!wet(pc.x, pc.y)) { pc.status = 'land'; return; }
-  const cast = P.shelter ? (x, y, d) => Math.min(castShore(x, y, d), castRay(x, y, d, P.pvS, 0.5)) : castShore;
+  const cast = P.shelter ? (x, y, d) => Math.min(castShore(x, y, d), P.pvIX ? castIdx(x, y, d, P.pvIX, 0.5) : castRay(x, y, d, P.pvS, 0.5)) : castShore;
   const rad = allRadials(pc.x, pc.y, STEP, cast);
   if (!rad.every(r => isFinite(r.L))) { pc.status = 'open'; return; }
   const eff = effectiveFetch(rad, P.n);
@@ -783,7 +816,7 @@ async function runCheck() {
   if (!isFinite(allowFor('pv')) || !isFinite(allowFor('bnd'))) { toast('กรอก Hs ที่รับได้ให้มากกว่า 0 m', 4000); return; }
   const step = +$('chkStep').value;
   const { pieces, targets } = makePieces(step);
-  const P = { n: +$('fmethod').value, list: [...modeSet(st.mode)], exposed: $('chkExposed').checked, shelter: shelterOn(), U1: u1h(), pvS: st.pvS, step, modeLbl: modeText() };
+  const P = { n: +$('fmethod').value, list: [...modeSet(st.mode)], exposed: $('chkExposed').checked, shelter: shelterOn(), U1: u1h(), pvS: st.pvS, pvIX: st.pvIX, step, modeLbl: modeText() };
   const token = ++CHK.token; CHK.running = true;
   const btn = $('chkRun'); btn.disabled = true; hidePop(true);
   const t0 = performance.now(); let tYield = t0;
@@ -861,7 +894,7 @@ function refreshCheck() {
   if (allRuns.length) {
     const nShow = CHK.showAll || CARD.state === 'max' ? Math.min(allRuns.length, 200) : Math.min(allRuns.length, 5);
     html += '<div class="sum"><div class="sumhead"><b>ช่วงที่เกิน</b><span class="tag">เรียงจาก H<sub>s</sub> สูงสุด</span></div><div class="runs">'
-      + allRuns.slice(0, nShow).map((r, i) => '<button class="run" data-run="' + i + '"><span class="t">' + (r.tg.role === 'pv' ? r.tg.name : 'Boundary') + '</span><span class="h">' + fmt(r.max.Hs, 2) + ' m · η ' + etaPct(r.max.eta) + '%</span>'
+      + allRuns.slice(0, nShow).map((r, i) => '<button class="run" data-run="' + i + '"><span class="t">' + (r.tg.role === 'pv' ? r.tg.name : r.tg.f.short) + '</span><span class="h">' + fmt(r.max.Hs, 2) + ' m · η ' + etaPct(r.max.eta) + '%</span>'
         + '<span class="s">' + (r.whole ? 'ทั้งรอบ' : 'กม. ' + chain(r.ch0) + '–' + chain(r.ch1) + (r.wrap ? ' (ผ่านจุดเริ่ม)' : '')) + ' · ' + fmtInt(r.len) + ' m · ลมจาก ' + r.max.dir + '° · F ' + fmt(r.max.F / 1000, 2) + ' km</span></button>').join('')
       + '</div>' + (allRuns.length > 5 ? '<button class="btn ghost sm" id="runsAll">' + (CHK.showAll ? 'แสดงน้อยลง' : 'แสดงทั้งหมด ' + allRuns.length + ' ช่วง') + '</button>' : '') + '</div>';
   }
@@ -906,6 +939,7 @@ function drawCheck(c, imgVis, labBg) {
   if (WB.view === 'wb' && R.wbMax > 0) { drawWB(R, c); return; }
   const paths = { ok: new Path2D(), near: new Path2D(), over: new Path2D(), na: new Path2D() }, used = {};
   for (const p of R.pieces) {
+    if (p.cls === 'inner') continue;
     const [ax, ay] = toScreen(p.x0, p.y0), [bx, by] = toScreen(p.x1, p.y1);
     if (Math.max(ax, bx) < -10 || Math.min(ax, bx) > W + 10 || Math.max(ay, by) < -10 || Math.min(ay, by) > H + 10) continue;
     const k = paths[p.cls] ? p.cls : 'na';
@@ -935,6 +969,7 @@ const onScr = (ax, ay, bx, by) => !(Math.max(ax, bx) < -10 || Math.min(ax, bx) >
 function drawWB(R, c) {
   const bands = [0, 1, 2, 3, 4].map(() => new Path2D()), base = new Path2D(), na = new Path2D(), used = new Set();
   for (const p of R.pieces) {
+    if (p.cls === 'inner') continue;
     const [ax, ay] = toScreen(p.x0, p.y0), [bx, by] = toScreen(p.x1, p.y1);
     if (!onScr(ax, ay, bx, by)) continue;
     let path, k;
@@ -968,6 +1003,7 @@ function pickPiece(px, py, tol = 9) {
   const R = CHK.res; if (!R || R.res !== st.res) return null;
   let best = null, bd = tol;
   for (const p of R.pieces) {
+    if (p.cls === 'inner') continue;
     const [ax, ay] = toScreen(p.x0, p.y0), [bx, by] = toScreen(p.x1, p.y1);
     if (Math.min(ax, bx) - tol > px || Math.max(ax, bx) + tol < px || Math.min(ay, by) - tol > py || Math.max(ay, by) + tol < py) continue;
     const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
@@ -984,12 +1020,12 @@ function hoverPiece(px, py) {
   if (POP.pinned) return;
   if (p) { if (p !== POP.pc) showPop(p, false); } else if (POP.pc) hidePop();
 }
-const STATUS_TXT = { land: 'กึ่งกลางช่วงอยู่บนบก ไม่ตรวจ', lee: 'ไม่มีทิศลมที่พัดเข้าด้านนอกในโหมดทิศนี้', open: 'มีรัศมีที่ไม่ชนขอบอ่าง' };
+const STATUS_TXT = { inner: 'ขอบร่วมกับแพข้างเคียง (แพติดกัน) ไม่ใช่ขอบที่รับคลื่น ไม่ตรวจ', land: 'กึ่งกลางช่วงอยู่บนบก ไม่ตรวจ', lee: 'ไม่มีทิศลมที่พัดเข้าด้านนอกในโหมดทิศนี้', open: 'มีรัศมีที่ไม่ชนขอบอ่าง' };
 function showPop(p, pin) {
   POP.pc = p; POP.pinned = pin;
   const el = $('pop'), A = allowFor(p.tg.role), kf = HFAC[+$('hp').value];
   const cls = { ok: 'ok', near: 'ok', over: 'over' }[p.cls];
-  el.innerHTML = '<div class="pop-head"><b>' + (p.tg.role === 'pv' ? 'PV Array · ' + p.tg.name : 'Project Boundary') + '</b>' + (pin ? '<button class="iconbtn" id="popX" aria-label="ปิด" style="width:28px;height:28px">×</button>' : '') + '</div>'
+  el.innerHTML = '<div class="pop-head"><b>' + (p.tg.role === 'pv' ? 'PV Array · ' + p.tg.name : p.tg.name) + '</b>' + (pin ? '<button class="iconbtn" id="popX" aria-label="ปิด" style="width:28px;height:28px">×</button>' : '') + '</div>'
     + '<span class="tag">กม. ' + chain(p.ch) + ' · E ' + fmtInt(p.x) + ' N ' + fmtInt(p.y) + '</span>'
     + (p.Hs != null ? '<div class="hsline"><span class="num">' + p.Hs.toFixed(2) + '<small>m</small></span><span class="badge ' + cls + '"' + (p.cls === 'near' ? ' style="color:var(--warning);border-color:rgba(245,158,11,.4)"' : '') + '>' + (p.Hs / A * 100).toFixed(0) + '% ของ ' + A.toFixed(2) + ' m</span></div>'
       + '<dl class="kv"><dt>H<sub>s</sub> × ' + kf.toFixed(2) + '</dt><dd>' + (p.Hs * kf).toFixed(2) + ' m</dd><dt>ลมพัดมาจาก</dt><dd>' + p.dir + '° (' + compass(p.dir) + ')</dd><dt>F<sub>eff</sub></dt><dd>' + (p.F / 1000).toFixed(2) + ' km</dd><dt>T<sub>p</sub></dt><dd>' + p.T.toFixed(2) + ' s</dd>'
@@ -1299,6 +1335,7 @@ function setReservoir(key, first = false) {
   buildProjectLayers();
   renderTabs(); renderPrjCard(); renderCfg();
   $('zoneTag').textContent = 'UTM ZONE ' + ZONE + 'N · WGS84 (m)';
+  $('readout').textContent = 'UTM ' + ZONE + 'N';
   $('resName').innerHTML = r.th + '<span class="tag">' + r.code + '</span>';
   $('miniName').textContent = r.short + ' · ' + r.code;
   $('gust').value = r.gust;
@@ -1317,8 +1354,8 @@ const VERIFY = {
   BB: { area: 304.8, ref: 300, src: 'Wikipedia', dam: 16, note: 'รวมแม่น้ำปิง แม่น้ำตื่น ทะเลสาบดอยเต่า และอ่างแก่งก้อเป็นผืนน้ำเดียว', excel: 'รัศมีตรงกับ Excel BB ค่ากลาง 7–14 m · F1 แบบผิวน้ำเปิดได้ Hs 1.34 m เทียบ Excel 1.33 m' },
   SNR: { area: 356.4, ref: 419, src: 'EGAT', dam: 63, note: 'พื้นที่เล็กกว่าค่าของ EGAT 15% เส้นขอบน่าจะเป็นระดับน้ำที่ต่ำกว่าระดับเก็บกักสูงสุด ควรหาเส้นขอบที่ระดับน้ำออกแบบมายืนยัน', excel: 'รัศมีต่างจาก Excel SNR ค่ากลาง 19–112 m · F1 ได้ Hs 1.99 m เทียบ Excel 1.90 m' },
   VRK: { area: 367.1, ref: 388, src: 'Wikipedia', dam: 12, note: 'ใช้ polygon อ่างเก็บน้ำเขื่อนเขาแหลม (ชื่อเดิมของเขื่อนวชิราลงกรณ)', excel: 'ไม่มีไฟล์ Excel อ้างอิง' },
-  UBR: { area: 382.3, ref: 388, src: 'EGAT', dam: 22, note: 'อยู่ใน UTM zone 48N', excel: 'ไม่มีไฟล์ Excel อ้างอิง · ยังไม่มีผังโครงการ' },
-  SRD: { area: 266.2, ref: 288, src: 'Wikipedia', dam: 0, note: 'รวม polygon ลำโดมน้อย 2 ชุดในไฟล์ · อยู่ใน UTM zone 48N', excel: 'ไม่มีไฟล์ Excel อ้างอิง · ยังไม่มีผังโครงการ' },
+  UBR: { area: 382.3, ref: 388, src: 'EGAT', dam: 22, note: 'อยู่ใน UTM zone 48N', excel: 'ไม่มีไฟล์ Excel อ้างอิง' },
+  SRD: { area: 266.2, ref: 288, src: 'Wikipedia', dam: 0, note: 'รวม polygon ลำโดมน้อย 2 ชุดในไฟล์ · อยู่ใน UTM zone 48N', excel: 'ไม่มีไฟล์ Excel อ้างอิง' },
 };
 const gustSource = k => RES[k].gustSrc ? 'จาก ' + RES[k].gustSrc : k === 'SRD' ? 'ตามที่กำหนดให้ใช้' : 'ไม่มีแหล่งอ้างอิงในไฟล์ ควรยืนยันกับข้อมูลลมของพื้นที่';
 function verifyRow(k, cur) {
@@ -1501,7 +1538,7 @@ async function buildReport() {
       rows.push([ROLE_LBL[role], s.A.toFixed(2), s.mx ? s.mx.Hs.toFixed(2) + ' (' + (s.mx.Hs / s.A * 100).toFixed(0) + '%)' : '—', s.mx ? s.mx.dir + '°' : '—', s.mx ? (s.mx.Hs * S.kf).toFixed(2) : '—',
         fmtInt(s.Lover) + ' / ' + fmtInt(s.wet) + (s.wet ? ' (' + (100 * s.Lover / s.wet).toFixed(1) + '%)' : ''), fmtInt(s.Lnear), s.runs.length ? '<b class="bad">ไม่ผ่าน ' + s.runs.length + ' ช่วง</b>' : '<b class="good">ผ่าน</b>']);
     }
-    const runs = (R.runs || []).slice(0, 200).map((x, i) => [i + 1, x.tg.role === 'pv' ? 'PV · ' + x.tg.name : 'Boundary', x.whole ? 'ทั้งรอบ' : chain(x.ch0) + ' – ' + chain(x.ch1), fmtInt(x.len), x.max.Hs.toFixed(2), (x.max.Hs / allowFor(x.tg.role) * 100).toFixed(0) + '%', x.max.dir + '°', (x.max.F / 1000).toFixed(2), etaPct(x.max.eta) + '%']);
+    const runs = (R.runs || []).slice(0, 200).map((x, i) => [i + 1, x.tg.role === 'pv' ? 'PV · ' + x.tg.name : x.tg.f.short, x.whole ? 'ทั้งรอบ' : chain(x.ch0) + ' – ' + chain(x.ch1), fmtInt(x.len), x.max.Hs.toFixed(2), (x.max.Hs / allowFor(x.tg.role) * 100).toFixed(0) + '%', x.max.dir + '°', (x.max.F / 1000).toFixed(2), etaPct(x.max.eta) + '%']);
     const wbr = ['pv', 'bnd'].map(rl => [rl, wbRole(R, rl)]).filter(x => x[1]), wbAny = wbr.some(([, w]) => w.n);
     const wbSec = '<h3>Wave Breaker ที่ต้องใช้</h3>'
       + (wbAny ? '<p>ช่วงที่ H<sub>s</sub> เกินค่าที่รับได้ต้องลดคลื่นด้วย Wave Breaker ให้ K<sub>t</sub> = H<sub>t</sub>/H<sub>i</sub> ≤ H<sub>s,รับได้</sub>/H<sub>s</sub> · นิยามประสิทธิภาพ ' + WB_DEF_TXT[WB.def] + ' ปัดขึ้นเป็นจำนวนเต็ม %</p>'
@@ -1518,7 +1555,7 @@ async function buildReport() {
       + wbSec
       + (runs.length ? '<h3>ช่วงที่เกินค่าที่รับได้ (เรียงจาก H<sub>s</sub> สูงสุด)</h3>' + T(runs, ['#', 'ตำแหน่ง', 'กม. (จากจุดแรกของรูป)', 'ยาว (m)', 'H<sub>s</sub> สูงสุด (m)', '% ของค่าที่รับได้', 'ลมจาก', 'F<sub>eff</sub> (km)', 'η WB']) + (R.runs.length > 200 ? '<p>แสดง 200 จาก ' + R.runs.length + ' ช่วง</p>' : '') : '<p>ไม่มีช่วงที่เกินค่าที่รับได้</p>');
   } else chk = '<p class="warn">ยังไม่ได้ตรวจตามแนวขอบ กด Compute ในกล่อง "ความสามารถรับคลื่นของ PV Array และ Project Boundary" แล้วสร้างรายงานใหม่เพื่อใส่ผลส่วนนี้</p>';
-  const vrow = (() => { const d = (V.area / V.ref - 1) * 100; return T([['เส้นขอบอ่าง', 'Hydro_aw.kmz · ' + V.note], ['พื้นที่ผิวน้ำจากไฟล์', V.area.toFixed(1) + ' km² เทียบค่าอ้างอิง ' + V.ref + ' km² (' + V.src + ') ต่าง ' + (d >= 0 ? '+' : '') + d.toFixed(1) + '%' + (Math.abs(d) > 10 ? ' — ควรยืนยันเส้นขอบที่ระดับน้ำออกแบบ' : '')], ['ตำแหน่งเขื่อน', 'ห่างจากขอบน้ำในไฟล์ ' + V.dam + ' m'], ['เทียบไฟล์ Excel', V.excel], ['ผังโครงการ', r.prj ? 'Boundary_' + PROJECTS[r.prj].name + '.kmz และ ' + (pvCfg(r.prj) ? pvCfg(r.prj).file + ' (PV Array Configuration ' + pvCfg(r.prj).name + ', ' : 'PV_Array_' + PROJECTS[r.prj].name + '.kmz (') + st.prjLayers[1].feats.length + ' แพ)' + (PROJECTS[r.prj].bndOpen ? ' · เส้น Boundary ในไฟล์ไม่ปิดรูปฝั่งตลิ่ง ไม่ตรวจเส้นปิด' : '') : 'ยังไม่มี']]); })();
+  const vrow = (() => { const d = (V.area / V.ref - 1) * 100; return T([['เส้นขอบอ่าง', 'Hydro_aw.kmz · ' + V.note], ['พื้นที่ผิวน้ำจากไฟล์', V.area.toFixed(1) + ' km² เทียบค่าอ้างอิง ' + V.ref + ' km² (' + V.src + ') ต่าง ' + (d >= 0 ? '+' : '') + d.toFixed(1) + '%' + (Math.abs(d) > 10 ? ' — ควรยืนยันเส้นขอบที่ระดับน้ำออกแบบ' : '')], ['ตำแหน่งเขื่อน', 'ห่างจากขอบน้ำในไฟล์ ' + V.dam + ' m'], ['เทียบไฟล์ Excel', V.excel], ['ผังโครงการ', r.prj ? 'Boundary_' + PROJECTS[r.prj].name + '.kmz' + (PROJECTS[r.prj].bnd.length > 1 ? ' (' + PROJECTS[r.prj].bnd.length + ' พื้นที่)' : '') + ' และ ' + (pvCfg(r.prj) ? pvCfg(r.prj).file + ' (PV Array Configuration ' + pvCfg(r.prj).name + ', ' : (PROJECTS[r.prj].pvFile || 'PV_Array_' + PROJECTS[r.prj].name + '.kmz') + ' (') + st.prjLayers[1].feats.length + ' แพ)' + (PROJECTS[r.prj].bndOpen ? ' · เส้น Boundary ในไฟล์ไม่ปิดรูปฝั่งตลิ่ง ไม่ตรวจเส้นปิด' : '') : 'ยังไม่มี']]); })();
   const css = '@page{size:A4;margin:16mm}*{box-sizing:border-box}body{margin:0;background:#fff;color:#141413;font-family:Inter,"Noto Sans Thai",system-ui,sans-serif;font-size:10.5pt;line-height:1.55}main{max-width:780px;margin:0 auto;padding:28px 28px 48px;outline:none}h1{font-family:"Inter Tight","Noto Sans Thai",sans-serif;font-size:20pt;font-weight:600;letter-spacing:-.4px;line-height:1.2;margin:0 0 4px}h2{font-family:"Inter Tight","Noto Sans Thai",sans-serif;font-size:13pt;font-weight:600;margin:26px 0 8px;padding-top:10px;border-top:1px solid #ddd}h3{font-size:11pt;font-weight:600;margin:16px 0 6px}.meta{color:#6b6b6b;font:9pt "JetBrains Mono",monospace;letter-spacing:.3px}table{border-collapse:collapse;width:100%;font-size:9.5pt;border-color:#cfcfcf}th,td{border:1px solid #cfcfcf;padding:5px 7px;text-align:left;vertical-align:top}thead th{background:#f3f3f1;font-weight:600}tbody th{background:#fafaf8;font-weight:500;width:34%}.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:6px 0 12px}.kpi{border:1px solid #ddd;border-radius:8px;padding:8px 10px}.kpi span{display:block;font-size:8.5pt;color:#6b6b6b}.kpi b{font-family:"Inter Tight",sans-serif;font-size:17pt;font-weight:600}.kpi small{font-size:9pt;color:#6b6b6b;font-weight:400}figure{margin:10px 0;break-inside:avoid}figure img{width:100%;border-radius:6px;border:1px solid #ddd}figcaption{font-size:9pt;color:#6b6b6b;margin-top:4px}.rose{display:grid;grid-template-columns:300px 1fr;gap:16px;align-items:center}.rose img{border:0}.good{color:#15803d}.bad{color:#b91c1c}.warn{color:#92400e}ol{padding-left:20px}li{margin-bottom:4px}.note{border:1px dashed #bbb;border-radius:6px;padding:10px;color:#6b6b6b;min-height:48px}@media print{h2{break-after:avoid}table{break-inside:auto}tr{break-inside:avoid}}';
   const legend = '<p>' + roseLegendHTML(D, ROSE_PRINT).replace(/<span><i style="([^"]*)"><\/i><em>/g, '<span style="display:inline-flex;align-items:center;gap:6px;margin-right:12px"><i style="display:inline-block;width:10px;height:10px;$1"></i><em style="font-style:normal">') + '</p>';
   const body = '<main id="rep" contenteditable="true" spellcheck="false">'
