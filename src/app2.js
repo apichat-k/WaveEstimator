@@ -580,6 +580,32 @@ function orderBlocks(key, blocks) {
   }
   return blocks.slice().sort((a, b) => (Math.abs(a.c[1] - b.c[1]) > 0.0006 ? b.c[1] - a.c[1] : a.c[0] - b.c[0]));
 }
+// ---------- PV Array configurations (e.g. SNR-PV1: 1-in a row / 2-in a row) ----------
+const pvCfgs = key => (key && PROJECTS[key] && PROJECTS[key].cfgs) || null;
+function pvCfg(key) {
+  const c = pvCfgs(key); if (!c) return null;
+  const s = (lsGet('fwe-pvcfg') || {})[key];
+  return c.find(x => x.id === s) || c[0];
+}
+const cfgName = () => { const c = pvCfg(RES[st.res].prj); return c ? c.name : ''; };
+const withCfg = (code, sep = ' · ') => code + (cfgName() ? sep + cfgName() : '');
+function renderCfg() {
+  const key = RES[st.res].prj, c = pvCfgs(key), row = $('cfgRow');
+  row.hidden = !c; if (!c) return;
+  const cur = pvCfg(key).id;
+  $('cfgSeg').innerHTML = c.map(x => '<button data-cfg="' + x.id + '" aria-pressed="' + (x.id === cur) + '">' + x.name + '<small>' + PROJECTS[key][x.key].length + ' แพ</small></button>').join('');
+  $('cfgSeg').querySelectorAll('[data-cfg]').forEach(b => b.onclick = () => setPvCfg(b.dataset.cfg));
+}
+function setPvCfg(id) {
+  const key = RES[st.res].prj; if (!pvCfgs(key) || pvCfg(key).id === id) return;
+  const all = lsGet('fwe-pvcfg') || {}; all[key] = id; lsSet('fwe-pvcfg', all);
+  const rerun = !!(CHK.res && CHK.res.res === st.res);
+  hidePop(true); clearCheck();
+  buildProjectLayers(); renderPrjCard(); renderCfg();
+  castPoint(); draw();
+  if (rerun) { toast('เปลี่ยนเป็น ' + cfgName() + ' แล้ว กำลังตรวจขอบใหม่'); runCheck(); }
+  else toast('เปลี่ยนผัง PV Array เป็น ' + cfgName() + ' แล้ว');
+}
 function buildProjectLayers() {
   const key = RES[st.res].prj;
   st.prjLayers = []; st.pvRings = []; st.pvS = new Float64Array(0);
@@ -587,8 +613,9 @@ function buildProjectLayers() {
   const P = PROJECTS[key], vis = lsGet('fwe-prjvis') || {};
   const mk = f => { f.rings = f.ll.map(toUTMpts); f.label = centroid(f.rings[0]); return f; };
   const bnd = { id: 'prj-bnd', role: 'bnd', name: 'Project Boundary', vis: vis.bnd !== false, feats: P.bnd.map(r => mk({ name: 'Project Boundary', ll: [r], open: P.bndOpen })) };
-  const blocks = orderBlocks(key, P.pv.map(r => ({ r, c: centroid(r) })));
-  const pv = { id: 'prj-pv', role: 'pv', name: 'PV Array', vis: vis.pv !== false, feats: blocks.map((b, i) => mk({ name: 'แพ ' + (i + 1), short: String(i + 1), ll: [b.r] })) };
+  const cfg = pvCfg(key), pvData = cfg ? P[cfg.key] : P.pv;
+  const blocks = orderBlocks(key, pvData.map(r => ({ r, c: centroid(r) })));
+  const pv = { id: 'prj-pv', role: 'pv', name: 'PV Array' + (cfg ? ' (' + cfg.name + ')' : ''), vis: vis.pv !== false, feats: blocks.map((b, i) => mk({ name: 'แพ ' + (i + 1), short: String(i + 1), ll: [b.r] })) };
   [bnd, pv].forEach(L => L.bbox = featBounds(L.feats));
   st.prjLayers = [bnd, pv];
   st.pvRings = pv.feats.map(f => f.rings[0]);
@@ -603,7 +630,7 @@ function ringLen(r, closed) { let s = 0; for (let i = 0; i < r.length - (closed 
 function renderPrjCard() {
   const key = RES[st.res].prj;
   $('zoomPrj').hidden = !key;
-  $('chkPrj').textContent = key ? RES[st.res].code : RES[st.res].code + ' · ยังไม่มีผัง';
+  $('chkPrj').textContent = key ? withCfg(RES[st.res].code) : RES[st.res].code + ' · ยังไม่มีผัง';
   $('chkRun').disabled = !key;
   const ul = $('prjList'); ul.innerHTML = '';
   if (!key) { ul.innerHTML = '<li class="note">' + RES[st.res].code + ' ยังไม่มีไฟล์ Project Boundary / PV Array แสดงเฉพาะขอบอ่าง</li>'; $('prjNote').hidden = true; $('vLay').textContent = 'ขอบอ่างเท่านั้น'; return; }
@@ -770,7 +797,7 @@ async function runCheck() {
     }
   }
   CHK.running = false; btn.disabled = false;
-  CHK.res = { pieces, targets, P, ms: performance.now() - t0, res: st.res };
+  CHK.res = { pieces, targets, P, ms: performance.now() - t0, res: st.res, cfg: cfgName() };
   CHK.stale = false; CHK.showAll = false; $('chkStale').hidden = true;
   $('chkProg').textContent = pieces.length.toLocaleString('en-US') + ' ช่วง · ' + (CHK.res.ms / 1000).toFixed(1) + ' s';
   saveChkPrefs();
@@ -863,7 +890,7 @@ function refreshCheck() {
 }
 function checkTSV() {
   const R = CHK.res, kf = HFAC[+$('hp').value];
-  const lines = ['# FPV Wave Estimator · wave check · ' + RES[R.res].th + ' (' + RES[R.res].code + ') · UTM ' + ZONE + 'N · U1h ' + R.P.U1.toFixed(2) + ' m/s · ' + R.P.modeLbl + (R.P.exposed ? ' · exposed only' : '') + (R.P.shelter ? ' · PV shelter' : ' · open water') + ' · step ' + R.P.step + ' m',
+  const lines = ['# FPV Wave Estimator · wave check · ' + RES[R.res].th + ' (' + RES[R.res].code + (R.cfg ? ', PV ' + R.cfg : '') + ') · UTM ' + ZONE + 'N · U1h ' + R.P.U1.toFixed(2) + ' m/s · ' + R.P.modeLbl + (R.P.exposed ? ' · exposed only' : '') + (R.P.shelter ? ' · PV shelter' : ' · open water') + ' · step ' + R.P.step + ' m',
     'Layer\tFeature\tChainage_m\tE\tN\tLat\tLon\tStatus\tWindFrom_deg\tFeff_km\tHs_m\tHd_m\tTp_s\tAllowHs_m\tRatio\tKt_req\tWB_eta_req_pct (' + (WB.def === 'e' ? '1-Kt^2' : '1-Kt') + ')'];
   for (const p of R.pieces) {
     const [lo, la] = utmToLL(p.x, p.y, ZONE), A = allowFor(p.tg.role);
@@ -1270,7 +1297,7 @@ function setReservoir(key, first = false) {
   setMode('all');
   setShoreline(decodeRings(SHORES[key]));
   buildProjectLayers();
-  renderTabs(); renderPrjCard();
+  renderTabs(); renderPrjCard(); renderCfg();
   $('zoneTag').textContent = 'UTM ZONE ' + ZONE + 'N · WGS84 (m)';
   $('resName').innerHTML = r.th + '<span class="tag">' + r.code + '</span>';
   $('miniName').textContent = r.short + ' · ' + r.code;
@@ -1373,7 +1400,7 @@ function composeMap(withBase) {
   g.scale(s, s);
   const r = RES[st.res], S = pointSummary(), mono = '"JetBrains Mono", "Noto Sans Thai", monospace';
   g.fillStyle = '#FAFAFA'; g.font = '600 16px "Inter Tight", "Noto Sans Thai", sans-serif'; g.fillText(r.th, 16, 27);
-  const tw = g.measureText(r.th).width; g.fillStyle = '#22C55E'; g.font = '400 12px ' + mono; g.fillText(r.code, 16 + tw + 10, 27);
+  const tw = g.measureText(r.th).width; g.fillStyle = '#22C55E'; g.font = '400 12px ' + mono; g.fillText(withCfg(r.code), 16 + tw + 10, 27);
   g.fillStyle = '#A1A1A1'; g.font = '400 11.5px ' + mono;
   const ptTxt = (S.ok ? 'จุด E ' + fmtInt(st.pt.xy[0]) + ' N ' + fmtInt(st.pt.xy[1]) + ' · Hs ' + S.w.Hs.toFixed(2) + ' m · ' + HSHORT[S.p] + ' ' + (S.w.Hs * S.kf).toFixed(2) + ' m · F ' + (S.F / 1000).toFixed(2) + ' km · ลมจาก ' + S.dir + '° · U1h ' + S.U1.toFixed(1) + ' m/s' + (shelterOn() ? ' · แพบังคลื่น' : '') : 'จุดพิจารณาไม่อยู่บนผิวน้ำ');
   let rightW = 0;
@@ -1404,7 +1431,7 @@ function showCapModal(r) {
   const url = URL.createObjectURL(r.blob);
   $('capImg').src = url;
   $('capNote').textContent = 'หน้านี้คัดลอกภาพเข้า Clipboard เองไม่ได้ คลิกขวาที่ภาพแล้วเลือก "คัดลอกรูปภาพ" (มือถือ: กดค้างที่ภาพ)' + (r.base ? '' : ' · ภาพนี้ไม่รวมภาพดาวเทียม');
-  $('capSave').hidden = !LOCAL(); $('capSave').href = url; $('capSave').download = 'map_' + RES[st.res].code + '.png';
+  $('capSave').hidden = !LOCAL(); $('capSave').href = url; $('capSave').download = 'map_' + withCfg(RES[st.res].code, '_').replace(/\s+/g, '') + '.png';
   $('capModal').hidden = false;
 }
 $('capClose').onclick = () => { $('capModal').hidden = true; };
@@ -1452,6 +1479,7 @@ async function buildReport() {
     ['ลมเฉลี่ย 1 ชม. U<sub>1h</sub>', S.U1.toFixed(2) + ' m/s'],
     ['วิธีหา fetch', nWin === 9 ? 'เฉลี่ย 9 รัศมี ห่างกัน 3° (USBR DS-13 ข้อ B.1)' : 'รัศมีเดี่ยว'],
     ['ทิศลมที่พิจารณา', modeTxt],
+    ...(cfgName() ? [['PV Array Configuration', cfgName() + ' (' + st.prjLayers[1].feats.length + ' แพ)']] : []),
     ['แพ PV บังคลื่น', shelterOn() ? 'คิด (รัศมีหยุดที่ขอบแพ)' : 'ไม่คิด (ผิวน้ำเปิด)'],
     ['ความสูงคลื่นออกแบบ', HSHORT[S.p] + ' = ' + S.kf.toFixed(2) + ' H<sub>s</sub>'],
   ]);
@@ -1490,12 +1518,12 @@ async function buildReport() {
       + wbSec
       + (runs.length ? '<h3>ช่วงที่เกินค่าที่รับได้ (เรียงจาก H<sub>s</sub> สูงสุด)</h3>' + T(runs, ['#', 'ตำแหน่ง', 'กม. (จากจุดแรกของรูป)', 'ยาว (m)', 'H<sub>s</sub> สูงสุด (m)', '% ของค่าที่รับได้', 'ลมจาก', 'F<sub>eff</sub> (km)', 'η WB']) + (R.runs.length > 200 ? '<p>แสดง 200 จาก ' + R.runs.length + ' ช่วง</p>' : '') : '<p>ไม่มีช่วงที่เกินค่าที่รับได้</p>');
   } else chk = '<p class="warn">ยังไม่ได้ตรวจตามแนวขอบ กด Compute ในกล่อง "ความสามารถรับคลื่นของ PV Array และ Project Boundary" แล้วสร้างรายงานใหม่เพื่อใส่ผลส่วนนี้</p>';
-  const vrow = (() => { const d = (V.area / V.ref - 1) * 100; return T([['เส้นขอบอ่าง', 'Hydro_aw.kmz · ' + V.note], ['พื้นที่ผิวน้ำจากไฟล์', V.area.toFixed(1) + ' km² เทียบค่าอ้างอิง ' + V.ref + ' km² (' + V.src + ') ต่าง ' + (d >= 0 ? '+' : '') + d.toFixed(1) + '%' + (Math.abs(d) > 10 ? ' — ควรยืนยันเส้นขอบที่ระดับน้ำออกแบบ' : '')], ['ตำแหน่งเขื่อน', 'ห่างจากขอบน้ำในไฟล์ ' + V.dam + ' m'], ['เทียบไฟล์ Excel', V.excel], ['ผังโครงการ', r.prj ? 'Boundary_' + PROJECTS[r.prj].name + '.kmz และ PV_Array_' + PROJECTS[r.prj].name + '.kmz (' + st.prjLayers[1].feats.length + ' แพ)' + (PROJECTS[r.prj].bndOpen ? ' · เส้น Boundary ในไฟล์ไม่ปิดรูปฝั่งตลิ่ง ไม่ตรวจเส้นปิด' : '') : 'ยังไม่มี']]); })();
+  const vrow = (() => { const d = (V.area / V.ref - 1) * 100; return T([['เส้นขอบอ่าง', 'Hydro_aw.kmz · ' + V.note], ['พื้นที่ผิวน้ำจากไฟล์', V.area.toFixed(1) + ' km² เทียบค่าอ้างอิง ' + V.ref + ' km² (' + V.src + ') ต่าง ' + (d >= 0 ? '+' : '') + d.toFixed(1) + '%' + (Math.abs(d) > 10 ? ' — ควรยืนยันเส้นขอบที่ระดับน้ำออกแบบ' : '')], ['ตำแหน่งเขื่อน', 'ห่างจากขอบน้ำในไฟล์ ' + V.dam + ' m'], ['เทียบไฟล์ Excel', V.excel], ['ผังโครงการ', r.prj ? 'Boundary_' + PROJECTS[r.prj].name + '.kmz และ ' + (pvCfg(r.prj) ? pvCfg(r.prj).file + ' (PV Array Configuration ' + pvCfg(r.prj).name + ', ' : 'PV_Array_' + PROJECTS[r.prj].name + '.kmz (') + st.prjLayers[1].feats.length + ' แพ)' + (PROJECTS[r.prj].bndOpen ? ' · เส้น Boundary ในไฟล์ไม่ปิดรูปฝั่งตลิ่ง ไม่ตรวจเส้นปิด' : '') : 'ยังไม่มี']]); })();
   const css = '@page{size:A4;margin:16mm}*{box-sizing:border-box}body{margin:0;background:#fff;color:#141413;font-family:Inter,"Noto Sans Thai",system-ui,sans-serif;font-size:10.5pt;line-height:1.55}main{max-width:780px;margin:0 auto;padding:28px 28px 48px;outline:none}h1{font-family:"Inter Tight","Noto Sans Thai",sans-serif;font-size:20pt;font-weight:600;letter-spacing:-.4px;line-height:1.2;margin:0 0 4px}h2{font-family:"Inter Tight","Noto Sans Thai",sans-serif;font-size:13pt;font-weight:600;margin:26px 0 8px;padding-top:10px;border-top:1px solid #ddd}h3{font-size:11pt;font-weight:600;margin:16px 0 6px}.meta{color:#6b6b6b;font:9pt "JetBrains Mono",monospace;letter-spacing:.3px}table{border-collapse:collapse;width:100%;font-size:9.5pt;border-color:#cfcfcf}th,td{border:1px solid #cfcfcf;padding:5px 7px;text-align:left;vertical-align:top}thead th{background:#f3f3f1;font-weight:600}tbody th{background:#fafaf8;font-weight:500;width:34%}.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:6px 0 12px}.kpi{border:1px solid #ddd;border-radius:8px;padding:8px 10px}.kpi span{display:block;font-size:8.5pt;color:#6b6b6b}.kpi b{font-family:"Inter Tight",sans-serif;font-size:17pt;font-weight:600}.kpi small{font-size:9pt;color:#6b6b6b;font-weight:400}figure{margin:10px 0;break-inside:avoid}figure img{width:100%;border-radius:6px;border:1px solid #ddd}figcaption{font-size:9pt;color:#6b6b6b;margin-top:4px}.rose{display:grid;grid-template-columns:300px 1fr;gap:16px;align-items:center}.rose img{border:0}.good{color:#15803d}.bad{color:#b91c1c}.warn{color:#92400e}ol{padding-left:20px}li{margin-bottom:4px}.note{border:1px dashed #bbb;border-radius:6px;padding:10px;color:#6b6b6b;min-height:48px}@media print{h2{break-after:avoid}table{break-inside:auto}tr{break-inside:avoid}}';
   const legend = '<p>' + roseLegendHTML(D, ROSE_PRINT).replace(/<span><i style="([^"]*)"><\/i><em>/g, '<span style="display:inline-flex;align-items:center;gap:6px;margin-right:12px"><i style="display:inline-block;width:10px;height:10px;$1"></i><em style="font-style:normal">') + '</p>';
   const body = '<main id="rep" contenteditable="true" spellcheck="false">'
     + '<p class="meta">FPV WAVE ESTIMATOR · USBR DS-13 / CEM · ' + nowTH({ dateStyle: 'long', timeStyle: 'short' }) + '</p>'
-    + '<h1>รายงานประมาณความสูงคลื่นจากลม<br>' + r.th + ' (' + r.code + ')</h1>'
+    + '<h1>รายงานประมาณความสูงคลื่นจากลม<br>' + r.th + ' (' + withCfg(r.code, ', ') + ')</h1>'
     + '<p class="meta">UTM ZONE ' + ZONE + 'N · WGS84 · เส้นขอบอ่าง Hydro_aw.kmz</p>'
     + '<h2>1. ข้อมูลลมและเกณฑ์</h2>' + inputs
     + '<h2>2. ผลคำนวณที่จุดพิจารณา</h2>' + point
@@ -1509,7 +1537,7 @@ async function buildReport() {
     + '<h2>7. เอกสารอ้างอิง</h2><ol><li>U.S. Bureau of Reclamation. Design Standards No. 13: Embankment Dams, Chapter 6: Freeboard, Phase 4 (Final). September 2012. Appendix B.</li><li>U.S. Army Corps of Engineers. EM 1110-2-1100 Coastal Engineering Manual, Part II, Chapter 2.</li><li>U.S. Army Coastal Engineering Research Center. Shore Protection Manual. 1984.</li></ol>'
     + '<h2>8. หมายเหตุผู้จัดทำ</h2><p class="note">พิมพ์หมายเหตุหรือข้อสรุปที่นี่</p>'
     + '</main>';
-  return { css, body, title: 'รายงานคลื่น ' + r.code + ' ' + new Date().toISOString().slice(0, 10) };
+  return { css, body, title: 'รายงานคลื่น ' + withCfg(r.code, ' ') + ' ' + new Date().toISOString().slice(0, 10) };
 }
 const repDoc = rp => '<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + rp.title + '</title><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400..600&family=Inter+Tight:wght@600&family=JetBrains+Mono:wght@400&family=Noto+Sans+Thai:wght@400..600&display=swap"><style>' + rp.css + '</style></head><body>' + rp.body + '</body></html>';
 let REP = null;
