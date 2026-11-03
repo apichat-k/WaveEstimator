@@ -167,6 +167,7 @@ function draw() {
     ctx.fillStyle = labInk; labBg(() => ctx.fillText(fmtInt(n) + 'N', 6, sy - 4));
   }
   drawLayers(c, imgVis, labBg);
+  drawWBL();
   // radials
   if (st.pt && st.rad) {
     const [px, py] = st.pt.xy;
@@ -202,6 +203,7 @@ function draw() {
     }
   }
   drawCheck(c, imgVis, labBg);
+  drawWBLLabels();
   // site marker
   if (st.pt) {
     const [sx, sy] = toScreen(...st.pt.xy);
@@ -260,8 +262,8 @@ cv.addEventListener('pointerdown', e => {
   $('hint').hidden = true;
   cv.setPointerCapture(e.pointerId);
   ptrs.set(e.pointerId, { x: e.offsetX, y: e.offsetY });
-  if (ptrs.size === 1) { downAt = { x: e.offsetX, y: e.offsetY }; moved = false; MEAS.cand = MEAS.on ? measHit(e.offsetX, e.offsetY, measTol(e)) : -1; MEAS.drag = -1; }
-  if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch0 = { d: Math.hypot(a.x - b.x, a.y - b.y), s: st.view.s }; moved = true; MEAS.cand = MEAS.drag = -1; }
+  if (ptrs.size === 1) { downAt = { x: e.offsetX, y: e.offsetY }; moved = false; MEAS.cand = MEAS.on ? measHit(e.offsetX, e.offsetY, measTol(e)) : -1; MEAS.drag = -1; WBL.cand = !MEAS.on && !WBL.draw && WBL.sel >= 0 ? wblHitVertex(e.offsetX, e.offsetY, measTol(e)) : -1; WBL.drag = -1; }
+  if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch0 = { d: Math.hypot(a.x - b.x, a.y - b.y), s: st.view.s }; moved = true; MEAS.cand = MEAS.drag = -1; WBL.cand = WBL.drag = -1; }
 });
 cv.addEventListener('pointermove', e => {
   const [wx, wy] = toWorld(e.offsetX, e.offsetY), [lo, la] = st.proj.inv(wx, wy);
@@ -271,7 +273,14 @@ cv.addEventListener('pointermove', e => {
       if (e.pointerType === 'mouse') { cv.classList.toggle('onvert', measHit(e.offsetX, e.offsetY, 10) >= 0); if (!MEAS.done && MEAS.pts.length) { MEAS.hover = [wx, wy]; scheduleDraw(); } }
       return;
     }
-    if (e.pointerType === 'mouse') hoverPiece(e.offsetX, e.offsetY); return;
+    if (WBL.draw) { if (e.pointerType === 'mouse' && WBL.draw.pts.length) { WBL.hover = [wx, wy]; scheduleDraw(); } return; }
+    if (e.pointerType === 'mouse') {
+      const onV = WBL.sel >= 0 && wblHitVertex(e.offsetX, e.offsetY, 10) >= 0, onL = !onV && wblHitLine(e.offsetX, e.offsetY, 7) >= 0;
+      cv.classList.toggle('onvert', onV); cv.classList.toggle('onwbl', onL);
+      if (onV || onL) { if (!POP.pinned) hidePop(); return; }
+      hoverPiece(e.offsetX, e.offsetY);
+    }
+    return;
   }
   const prev = ptrs.get(e.pointerId);
   ptrs.set(e.pointerId, { x: e.offsetX, y: e.offsetY });
@@ -284,6 +293,7 @@ cv.addEventListener('pointermove', e => {
     afterView(true); return;
   }
   if (downAt && Math.hypot(e.offsetX - downAt.x, e.offsetY - downAt.y) > 5) moved = true;
+  if (moved && WBL.cand >= 0 && ptrs.size === 1) { WBL.drag = WBL.cand; WBL.lines[WBL.sel].pts[WBL.drag] = [wx, wy]; scheduleDraw(); return; }
   if (moved && MEAS.cand >= 0 && ptrs.size === 1) { MEAS.drag = MEAS.cand; MEAS.pts[MEAS.drag] = [wx, wy]; MEAS.hover = null; measRender(); return; }
   if (moved) { st.view.cx -= (e.offsetX - prev.x) / st.view.s; st.view.cy += (e.offsetY - prev.y) / st.view.s; afterView(true); }
 });
@@ -292,7 +302,10 @@ function endPtr(e) {
   ptrs.delete(e.pointerId);
   if (ptrs.size < 2) pinch0 = null;
   if (MEAS.drag >= 0) { MEAS.drag = MEAS.cand = -1; measRender(); }
+  else if (WBL.drag >= 0) { WBL.drag = WBL.cand = -1; wblChanged(); }
   else if (wasTap && e.type === 'pointerup' && MEAS.on) measTap(e.offsetX, e.offsetY, e);
+  else if (wasTap && e.type === 'pointerup' && WBL.draw) wblTap(e.offsetX, e.offsetY, e);
+  else if (wasTap && e.type === 'pointerup' && wblHitLine(e.offsetX, e.offsetY, e.pointerType === 'touch' ? 14 : 7) >= 0) { hidePop(true); wblSelect(wblHitLine(e.offsetX, e.offsetY, e.pointerType === 'touch' ? 14 : 7)); }
   else if (wasTap && e.type === 'pointerup') {
     const pc = pickPiece(e.offsetX, e.offsetY);
     if (pc) showPop(pc, true);
@@ -301,7 +314,7 @@ function endPtr(e) {
   if (ptrs.size === 0) downAt = null;
 }
 cv.addEventListener('pointerup', endPtr); cv.addEventListener('pointercancel', endPtr);
-cv.addEventListener('pointerleave', () => { if (!POP.pinned) hidePop(); cv.classList.remove('onpiece'); if (MEAS.hover) { MEAS.hover = null; scheduleDraw(); } });
+cv.addEventListener('pointerleave', () => { if (!POP.pinned) hidePop(); cv.classList.remove('onpiece'); if (MEAS.hover) { MEAS.hover = null; scheduleDraw(); } if (WBL.hover) { WBL.hover = null; scheduleDraw(); } });
 cv.addEventListener('wheel', e => {
   e.preventDefault();
   const [wx0, wy0] = toWorld(e.offsetX, e.offsetY);
@@ -356,6 +369,7 @@ function castPoint() {
   if (!st.pt) return;
   const [x, y] = st.pt.xy;
   st.rad = allRadials(x, y, STEP, pointCast(x, y));
+  st.radW = WBL.segs ? wbRad(x, y, st.rad, WBL.segs) : null;
   st.radOpen = shelterOn() ? allRadials(x, y, STEP, castShore) : null;
   recompute();
 }
@@ -363,7 +377,8 @@ function castPoint() {
 function recompute() {
   if (!st.pt) return;
   const n = +$('fmethod').value;
-  st.eff = effectiveFetch(st.rad, n);
+  st.eff0 = effectiveFetch(st.rad, n);
+  st.eff = st.radW ? effectiveFetch(st.radW, n) : st.eff0;
   st.effOpen = st.radOpen ? effectiveFetch(st.radOpen, n) : st.eff;
   st.dirIdx = maxIn(modeSet(st.mode));
   if (st.dirIdx < 0) st.dirIdx = 0;
@@ -400,11 +415,20 @@ function render() {
     flag.hidden = false;
     flag.innerHTML = '<b>มีทิศที่แรงกว่า</b> fetch สูงสุดจริงอยู่ที่ ' + st.rad[gi].deg + '° (F = ' + fmt(st.eff[gi] / 1000, 2) + ' km, Hs = ' + fmt(g.Hs, 2) + ' m) ซึ่งอยู่นอกทิศที่เลือก';
   } else flag.hidden = true;
+  const wf = $('wbPtFlag'); wf.hidden = true;
+  if (ok && st.radW) {
+    const i0 = maxIn(modeSet(st.mode), st.eff0), w0 = usbrDS13(st.eff0[i0], U1);
+    if (w0.Hs - r.Hs > 0.005) {
+      wf.hidden = false;
+      wf.innerHTML = '<b>แนว WB ลดคลื่นที่จุดนี้</b> H<sub>s</sub> ' + fmt(w0.Hs, 2) + ' → ' + fmt(r.Hs, 2) + ' m (−' + Math.round(100 * (1 - r.Hs / w0.Hs)) + '%) · F<sub>eff</sub> เทียบเท่า ' + fmt(st.eff0[i0] / 1000, 2) + ' → ' + fmt(F / 1000, 2) + ' km';
+    }
+  }
 
   const rows = [];
   if (r) {
     rows.push(['USBR DS-13 / CEM' + (shelterOn() ? ' (แพบัง)' : ''), F / 1000, r.Hs, r.Hs * kf, r.T, r.tmin / 3600, true]);
     rows.push(['SPM 1984 (ACER TM 2)', F / 1000, q.Hs, q.Hs * kf, q.T, q.tmin / 3600]);
+    if (st.radW) { const i0 = maxIn(modeSet(st.mode), st.eff0), w0 = usbrDS13(st.eff0[i0], U1); rows.push(['DS-13 ไม่คิดแนว WB @' + st.rad[i0].deg + '°', st.eff0[i0] / 1000, w0.Hs, w0.Hs * kf, w0.T, w0.tmin / 3600]); }
     if (st.radOpen) {
       const gO = maxIn(modeSet(st.mode), st.effOpen), wO = usbrDS13(st.effOpen[gO], U1);
       rows.push(['DS-13 ผิวน้ำเปิด (ไม่คิดแพบัง) @' + st.radOpen[gO].deg + '°', st.effOpen[gO] / 1000, wO.Hs, wO.Hs * kf, wO.T, wO.tmin / 3600]);
@@ -701,7 +725,7 @@ function wbHTML(R) {
   const roles = ['pv', 'bnd'].map(r => [r, wbRole(R, r)]).filter(x => x[1]);
   if (!roles.length) return '';
   const any = roles.some(([, w]) => w.n);
-  let h = '<div class="sum" id="wbSum"><div class="sumhead"><b>Wave Breaker ที่ต้องใช้</b>' + (any ? '<span class="tag">ประสิทธิภาพขั้นต่ำ</span>' : '<span class="badge ok">ไม่ต้องใช้</span>') + '</div>';
+  let h = '<div class="sum" id="wbSum"><div class="sumhead"><b>Wave Breaker ที่ต้องใช้</b>' + (any ? '<span class="tag">' + (R.P.wb ? 'ที่ต้องเพิ่ม หลังคิดแนว WB ที่วาด' : 'ประสิทธิภาพขั้นต่ำ') + '</span>' : '<span class="badge ok">ไม่ต้องใช้' + (R.P.wb ? 'เพิ่ม' : '') + '</span>') + '</div>';
   h += '<div class="wbgrid">' + roles.map(([role, w]) => '<div class="wbk"><span class="k">' + ROLE_LBL[role] + '</span>'
     + (w.n ? '<span class="v">≥ ' + etaPct(w.mx.eta) + '<small>%</small></span><span class="s">K<sub>t</sub> ≤ ' + (w.A / w.mx.Hs).toFixed(2) + '</span><span class="s">ยาว ' + fmtInt(w.len) + ' m</span>'
       + '<span class="s">H<sub>s</sub> ' + w.mx.Hs.toFixed(2) + ' → ' + w.A.toFixed(2) + ' m</span><span class="s">T<sub>p</sub> ' + w.mx.T.toFixed(1) + ' s · L<sub>0</sub> ' + L0of(w.mx.T).toFixed(0) + ' m</span>'
@@ -795,13 +819,14 @@ function evalPiece(pc, P) {
   const cast = P.shelter ? (x, y, d) => Math.min(castShore(x, y, d), P.pvIX ? castIdx(x, y, d, P.pvIX, 0.5) : castRay(x, y, d, P.pvS, 0.5)) : castShore;
   const rad = allRadials(pc.x, pc.y, STEP, cast);
   if (!rad.every(r => isFinite(r.L))) { pc.status = 'open'; return; }
-  const eff = effectiveFetch(rad, P.n);
+  const eff = effectiveFetch(P.wb ? wbRad(pc.x, pc.y, rad, P.wb) : rad, P.n);
   let cand = P.list;
   if (P.exposed && pc.nx != null) cand = cand.filter(i => { const t = rad[i].deg * Math.PI / 180; return Math.sin(t) * pc.nx + Math.cos(t) * pc.ny > 1e-6; });
   const bi = maxIn(cand, eff);
   if (bi < 0) { pc.status = 'lee'; return; }
   const w = usbrDS13(eff[bi], P.U1);
   pc.status = 'ok'; pc.dir = rad[bi].deg; pc.F = eff[bi]; pc.Hs = w.Hs; pc.T = w.T;
+  if (P.wb) { const e0 = effectiveFetch(rad, P.n), b0 = maxIn(cand, e0); pc.Hs0 = b0 >= 0 ? usbrDS13(e0[b0], P.U1).Hs : w.Hs; }
 }
 function classify(pc) {
   if (pc.Hs == null) return pc.status;
@@ -816,7 +841,7 @@ async function runCheck() {
   if (!isFinite(allowFor('pv')) || !isFinite(allowFor('bnd'))) { toast('กรอก Hs ที่รับได้ให้มากกว่า 0 m', 4000); return; }
   const step = +$('chkStep').value;
   const { pieces, targets } = makePieces(step);
-  const P = { n: +$('fmethod').value, list: [...modeSet(st.mode)], exposed: $('chkExposed').checked, shelter: shelterOn(), U1: u1h(), pvS: st.pvS, pvIX: st.pvIX, step, modeLbl: modeText() };
+  const P = { n: +$('fmethod').value, list: [...modeSet(st.mode)], exposed: $('chkExposed').checked, shelter: shelterOn(), U1: u1h(), pvS: st.pvS, pvIX: st.pvIX, wb: WBL.segs, wbTxt: wblSummary(), step, modeLbl: modeText() };
   const token = ++CHK.token; CHK.running = true;
   const btn = $('chkRun'); btn.disabled = true; hidePop(true);
   const t0 = performance.now(); let tYield = t0;
@@ -831,14 +856,14 @@ async function runCheck() {
   }
   CHK.running = false; btn.disabled = false;
   CHK.res = { pieces, targets, P, ms: performance.now() - t0, res: st.res, cfg: cfgName() };
-  CHK.stale = false; CHK.showAll = false; $('chkStale').hidden = true;
+  CHK.stale = false; CHK.showAll = false; $('chkStale').hidden = true; $('wblStale').hidden = true;
   $('chkProg').textContent = pieces.length.toLocaleString('en-US') + ' ช่วง · ' + (CHK.res.ms / 1000).toFixed(1) + ' s';
   saveChkPrefs();
   refreshCheck();
 }
 function clearCheck() {
   CHK.token++; CHK.running = false; CHK.res = null; CHK.stale = false;
-  $('chkRun').disabled = !RES[st.res].prj; $('chkProg').textContent = ''; $('chkStale').hidden = true;
+  $('chkRun').disabled = !RES[st.res].prj; $('chkProg').textContent = ''; $('chkStale').hidden = true; $('wblStale').hidden = true;
   $('chkOut').hidden = true; $('chkOut').innerHTML = ''; $('legend').hidden = true;
   $('chkMiniSum').textContent = RES[st.res].prj ? 'ยังไม่ได้คำนวณ' : '';
   hidePop(true); scheduleDraw();
@@ -886,7 +911,8 @@ function refreshCheck() {
     html += '<div class="sum"><div class="sumhead"><b>' + ROLE_LBL[role] + ' <span class="tag">≤ ' + fmt(A, 2) + ' m</span></b>' + badge + '</div>'
       + '<div class="bar" role="img" aria-label="สัดส่วนความยาวตามผลตรวจ"><i class="ok" style="width:' + pc(Lok) + '%"></i><i class="near" style="width:' + pc(Lnear) + '%"></i><i class="over" style="width:' + pc(Lover) + '%"></i><i class="na" style="width:' + pc(Lna) + '%"></i></div>'
       + '<div class="sumline"><span>H<sub>s</sub> สูงสุด</span><span>' + (mx ? fmt(mx.Hs, 2) + ' m · ' + (mx.Hs / A * 100).toFixed(0) + '% · ' + mx.dir + '° · H<sub>max</sub> ' + fmt(mx.Hs * kf, 2) : '—') + '</span>'
-      + '<span>ความยาวที่เกิน</span><span>' + fmtInt(Lover) + ' / ' + fmtInt(wetL) + ' m' + (wetL ? ' (' + (100 * Lover / wetL).toFixed(1) + '%)' : '') + '</span></div></div>';
+      + '<span>ความยาวที่เกิน</span><span>' + fmtInt(Lover) + ' / ' + fmtInt(wetL) + ' m' + (wetL ? ' (' + (100 * Lover / wetL).toFixed(1) + '%)' : '') + '</span>'
+      + (R.P.wb && mx ? '<span>H<sub>s</sub> สูงสุดถ้าไม่มีแนว WB</span><span>' + fmt(Math.max(...ps.filter(q => q.Hs0 != null).map(q => q.Hs0)), 2) + ' m</span>' : '') + '</div></div>';
   }
   allRuns.sort((a, b) => b.max.Hs - a.max.Hs);
   R.runs = allRuns;
@@ -899,7 +925,7 @@ function refreshCheck() {
       + '</div>' + (allRuns.length > 5 ? '<button class="btn ghost sm" id="runsAll">' + (CHK.showAll ? 'แสดงน้อยลง' : 'แสดงทั้งหมด ' + allRuns.length + ' ช่วง') + '</button>' : '') + '</div>';
   }
   const P = R.P;
-  html += '<div class="sum"><p class="note">U<sub>1h</sub> ' + fmt(P.U1, 2) + ' m/s · ' + P.modeLbl + (P.exposed ? ' · เฉพาะลมเข้าด้านนอก' : '') + (P.shelter ? ' · แพ PV บังคลื่น' : ' · ผิวน้ำเปิด') + ' · ทุก ' + P.step + ' m</p>'
+  html += '<div class="sum"><p class="note">U<sub>1h</sub> ' + fmt(P.U1, 2) + ' m/s · ' + P.modeLbl + (P.exposed ? ' · เฉพาะลมเข้าด้านนอก' : '') + (P.shelter ? ' · แพ PV บังคลื่น' : ' · ผิวน้ำเปิด') + (P.wb ? ' · คิด' + P.wbTxt : '') + ' · ทุก ' + P.step + ' m</p>'
     + '<div class="copyrow"><button class="btn secondary sm" id="chkCopy">คัดลอกผลทุกช่วง (TSV)</button><span class="copied" id="chkCopied"></span></div><textarea class="fallback" id="chkFallback" hidden readonly></textarea></div>';
   out.innerHTML = html; out.hidden = false;
   $('chkMiniSum').textContent = miniSum(R);
@@ -917,19 +943,19 @@ function refreshCheck() {
     out.querySelectorAll('[data-wbv]').forEach(x => x.setAttribute('aria-pressed', x.dataset.wbv === WB.view));
     renderLegend(); scheduleDraw();
   });
-  if ($('wbDef')) $('wbDef').onchange = () => { WB.def = $('wbDef').value; saveWB(); refreshCheck(); if (POP.pc) showPop(POP.pc, POP.pinned); };
+  if ($('wbDef')) $('wbDef').onchange = () => setWBDef($('wbDef').value);
   renderLegend();
   scheduleDraw(); placePop();
 }
 function checkTSV() {
   const R = CHK.res, kf = HFAC[+$('hp').value];
-  const lines = ['# FPV Wave Estimator · wave check · ' + RES[R.res].th + ' (' + RES[R.res].code + (R.cfg ? ', PV ' + R.cfg : '') + ') · UTM ' + ZONE + 'N · U1h ' + R.P.U1.toFixed(2) + ' m/s · ' + R.P.modeLbl + (R.P.exposed ? ' · exposed only' : '') + (R.P.shelter ? ' · PV shelter' : ' · open water') + ' · step ' + R.P.step + ' m',
-    'Layer\tFeature\tChainage_m\tE\tN\tLat\tLon\tStatus\tWindFrom_deg\tFeff_km\tHs_m\tHd_m\tTp_s\tAllowHs_m\tRatio\tKt_req\tWB_eta_req_pct (' + (WB.def === 'e' ? '1-Kt^2' : '1-Kt') + ')'];
+  const lines = ['# FPV Wave Estimator · wave check · ' + RES[R.res].th + ' (' + RES[R.res].code + (R.cfg ? ', PV ' + R.cfg : '') + ') · UTM ' + ZONE + 'N · U1h ' + R.P.U1.toFixed(2) + ' m/s · ' + R.P.modeLbl + (R.P.exposed ? ' · exposed only' : '') + (R.P.shelter ? ' · PV shelter' : ' · open water') + (R.P.wb ? ' · ' + R.P.wbTxt.replace(/<[^>]+>/g, '') : '') + ' · step ' + R.P.step + ' m',
+    'Layer\tFeature\tChainage_m\tE\tN\tLat\tLon\tStatus\tWindFrom_deg\tFeff_km\tHs_m\tHd_m\tTp_s\tAllowHs_m\tRatio\tKt_req\tWB_eta_req_pct (' + (WB.def === 'e' ? '1-Kt^2' : '1-Kt') + ')\tHs_noWBline_m'];
   for (const p of R.pieces) {
     const [lo, la] = utmToLL(p.x, p.y, ZONE), A = allowFor(p.tg.role);
     lines.push([ROLE_LBL[p.tg.role], p.tg.name, p.ch.toFixed(1), p.x.toFixed(1), p.y.toFixed(1), la.toFixed(6), lo.toFixed(6), p.cls,
       p.dir ?? '', p.F != null ? (p.F / 1000).toFixed(4) : '', p.Hs != null ? p.Hs.toFixed(3) : '', p.Hs != null ? (p.Hs * kf).toFixed(3) : '', p.T != null ? p.T.toFixed(2) : '', A.toFixed(2), p.Hs != null ? (p.Hs / A).toFixed(3) : '',
-      p.cls === 'over' ? (A / p.Hs).toFixed(3) : '', p.cls === 'over' ? etaPct(p.eta) : (p.Hs != null ? 0 : '')].join('\t'));
+      p.cls === 'over' ? (A / p.Hs).toFixed(3) : '', p.cls === 'over' ? etaPct(p.eta) : (p.Hs != null ? 0 : ''), p.Hs0 != null ? p.Hs0.toFixed(3) : (p.Hs != null ? p.Hs.toFixed(3) : '')].join('\t'));
   }
   return lines.join('\n');
 }
@@ -1029,6 +1055,7 @@ function showPop(p, pin) {
     + '<span class="tag">กม. ' + chain(p.ch) + ' · E ' + fmtInt(p.x) + ' N ' + fmtInt(p.y) + '</span>'
     + (p.Hs != null ? '<div class="hsline"><span class="num">' + p.Hs.toFixed(2) + '<small>m</small></span><span class="badge ' + cls + '"' + (p.cls === 'near' ? ' style="color:var(--warning);border-color:rgba(245,158,11,.4)"' : '') + '>' + (p.Hs / A * 100).toFixed(0) + '% ของ ' + A.toFixed(2) + ' m</span></div>'
       + '<dl class="kv"><dt>H<sub>s</sub> × ' + kf.toFixed(2) + '</dt><dd>' + (p.Hs * kf).toFixed(2) + ' m</dd><dt>ลมพัดมาจาก</dt><dd>' + p.dir + '° (' + compass(p.dir) + ')</dd><dt>F<sub>eff</sub></dt><dd>' + (p.F / 1000).toFixed(2) + ' km</dd><dt>T<sub>p</sub></dt><dd>' + p.T.toFixed(2) + ' s</dd>'
+      + (p.Hs0 != null && p.Hs0 - p.Hs > 0.005 ? '<dt>H<sub>s</sub> ถ้าไม่มีแนว WB</dt><dd>' + p.Hs0.toFixed(2) + ' m</dd>' : '')
       + '<dt>Wave Breaker</dt><dd>' + (p.cls === 'over' ? 'η ≥ ' + etaPct(p.eta) + '% · K<sub>t</sub> ≤ ' + (A / p.Hs).toFixed(2) : 'ไม่ต้องใช้') + '</dd></dl>'
       : '<p class="note">' + STATUS_TXT[p.cls] + '</p>')
     + (pin ? '<button class="btn secondary sm" id="popUse">เปิดเป็นจุดพิจารณา</button>' : '');
@@ -1333,6 +1360,7 @@ function setReservoir(key, first = false) {
   setMode('all');
   setShoreline(decodeRings(SHORES[key]));
   buildProjectLayers();
+  wblLoad();
   renderTabs(); renderPrjCard(); renderCfg();
   $('zoneTag').textContent = 'UTM ZONE ' + ZONE + 'N · WGS84 (m)';
   $('readout').textContent = 'UTM ' + ZONE + 'N';
@@ -1516,6 +1544,7 @@ async function buildReport() {
     ['ลมเฉลี่ย 1 ชม. U<sub>1h</sub>', S.U1.toFixed(2) + ' m/s'],
     ['วิธีหา fetch', nWin === 9 ? 'เฉลี่ย 9 รัศมี ห่างกัน 3° (USBR DS-13 ข้อ B.1)' : 'รัศมีเดี่ยว'],
     ['ทิศลมที่พิจารณา', modeTxt],
+    ['แนว Wave Breaker', WBL.lines.length ? (WBL.apply ? 'คิดผล · ' + wblSummary() : WBL.lines.length + ' แนว ไม่ได้คิดผลในการคำนวณ') : 'ไม่มี'],
     ...(cfgName() ? [['PV Array Configuration', cfgName() + ' (' + st.prjLayers[1].feats.length + ' แพ)']] : []),
     ['แพ PV บังคลื่น', shelterOn() ? 'คิด (รัศมีหยุดที่ขอบแพ)' : 'ไม่คิด (ผิวน้ำเปิด)'],
     ['ความสูงคลื่นออกแบบ', HSHORT[S.p] + ' = ' + S.kf.toFixed(2) + ' H<sub>s</sub>'],
@@ -1567,7 +1596,7 @@ async function buildReport() {
     + '<h2>3. แผนที่และ Fetch rose</h2>'
     + (map.url ? '<figure><img src="' + map.url + '" alt="แผนที่"><figcaption>รูปที่ 1 แผนที่จุดพิจารณา รัศมี fetch' + (R && R.res === st.res ? (WB.view === 'wb' && R.wbMax > 0 ? ' และประสิทธิภาพ Wave Breaker ที่ต้องใช้ตามแนวขอบ' : ' และผลตรวจตามแนวขอบ') : '') + (map.base ? '' : ' (ไม่รวมภาพดาวเทียม)') + '</figcaption></figure>' : '')
     + '<figure class="rose">' + (roseURL ? '<img src="' + roseURL + '" alt="Fetch rose">' : '') + '<figcaption>รูปที่ 2 Fetch rose ที่จุดพิจารณา ความยาวกลีบคือ F<sub>eff</sub> ของแต่ละทิศ สีบอก H<sub>s</sub> เทียบกับ H<sub>s</sub> ที่ PV Array รับได้ (' + fmt(D.A, 2) + ' m)' + legend + '</figcaption></figure>'
-    + '<h2>4. ความสามารถรับคลื่นของ PV Array และ Project Boundary</h2>' + chk
+    + '<h2>4. ความสามารถรับคลื่นของ PV Array และ Project Boundary</h2>' + wblReport() + chk
     + '<h2>5. ข้อมูลที่ใช้และการตรวจสอบ</h2>' + vrow
     + '<h2>6. วิธีคำนวณ</h2><ol>' + [...document.querySelectorAll('.steps li')].map(li => '<li>' + li.innerHTML + '</li>').join('') + '</ol>'
     + '<p><b>ข้อจำกัด:</b> ใช้ได้กับน้ำลึกเท่านั้น ไม่รวมการหักเห การเลี้ยวเบน การสะท้อน และคลื่นที่ลอดใต้แพ ผลขึ้นกับระดับน้ำของเส้นขอบอ่าง</p>'
@@ -1575,6 +1604,17 @@ async function buildReport() {
     + '<h2>8. หมายเหตุผู้จัดทำ</h2><p class="note">พิมพ์หมายเหตุหรือข้อสรุปที่นี่</p>'
     + '</main>';
   return { css, body, title: 'รายงานคลื่น ' + withCfg(r.code, ' ') + ' ' + new Date().toISOString().slice(0, 10) };
+}
+function wblReport() {
+  const L = WBL.lines.filter(l => l.pts.length >= 2);
+  if (!L.length) return '';
+  const ll = p => { const [lo, la] = st.proj.inv(p[0], p[1]); return 'E ' + fmtInt(p[0]) + ' N ' + fmtInt(p[1]) + ' (' + la.toFixed(5) + ', ' + lo.toFixed(5) + ')'; };
+  return '<h3>แนว Wave Breaker ที่กำหนด</h3><p>' + (WBL.apply
+    ? 'ผลในส่วนนี้คิดแนว WB ด้านล่างแล้ว คลื่นที่ผ่านแนวลดเหลือ K<sub>t</sub> เท่า แล้วโตต่อตามระยะที่เหลือ โดยใช้ fetch เทียบเท่าต่อรัศมี F′ = K<sub>t</sub><sup>2</sup>·(L − d) + d (L = ระยะถึงฝั่ง, d = ระยะถึงแนว WB) ก่อนเฉลี่ย 9 รัศมี · นิยาม ' + WB_DEF_TXT[WB.def]
+    : 'แนว WB ด้านล่างไม่ได้นำมาคิดในการคำนวณ') + '</p>'
+    + T(L.map(l => ['<span style="display:inline-block;width:16px;height:' + Math.max(3, Math.min(8, l.w)) + 'px;border-radius:2px;margin-right:8px;vertical-align:middle;background:' + l.col + ';border:1px solid #999"></span>' + l.name.replace(/[<>&]/g, ''), l.eta + '%', ktOf(l.eta).toFixed(2), fmtInt(wblLen(l)), l.pts.length, ll(l.pts[0]), ll(l.pts[l.pts.length - 1])]),
+      ['แนว', 'η', 'K<sub>t</sub>', 'ยาว (m)', 'จุด', 'จุดเริ่ม', 'จุดปลาย'])
+    + (WBL.apply ? '<p>ข้อจำกัด: ไม่ได้คำนวณการเลี้ยวเบนรอบปลายแนวโดยตรง รัศมีที่ผ่านพ้นปลายแนวได้ fetch เต็ม จึงสะท้อนผลของปลายแนวผ่านการเฉลี่ย 9 รัศมีเท่านั้น และ K<sub>t</sub> ถือว่าคงที่ไม่ขึ้นกับคาบคลื่น ค่าที่ได้สูงกว่าการลดความสูงตรง ๆ ราว 1–10% (ด้านปลอดภัย) เพราะ DS-13 ปรับความเร็วลมตามช่วงเวลาที่คลื่นโต</p>' : '');
 }
 const repDoc = rp => '<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + rp.title + '</title><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400..600&family=Inter+Tight:wght@600&family=JetBrains+Mono:wght@400&family=Noto+Sans+Thai:wght@400..600&display=swap"><style>' + rp.css + '</style></head><body>' + rp.body + '</body></html>';
 let REP = null;
@@ -1707,6 +1747,7 @@ function measRender() {
   scheduleDraw();
 }
 function measSet(on) {
+  if (on && WBL.draw) wblCancel();
   MEAS.on = on; $('measBtn').setAttribute('aria-pressed', on); $('meas').hidden = !on; cv.classList.toggle('measuring', on); $('app').classList.toggle('measuring', on);
   if (on) { $('hint').hidden = true; hidePop(true); } else { MEAS.pts = []; MEAS.done = false; MEAS.hover = null; }
   measRender();
@@ -1831,11 +1872,234 @@ $('measLU').onchange = () => { MEAS.lu = $('measLU').value; saveMeasPrefs(); mea
 $('measAU').onchange = () => { MEAS.au = $('measAU').value; saveMeasPrefs(); measRender(); };
 { const p = lsGet('fwe-meas'); if (p) { if (p.mode && ['line', 'path', 'poly'].includes(p.mode)) MEAS.mode = p.mode; if (p.lu && (p.lu === 'auto' || LEN_U[p.lu])) MEAS.lu = p.lu; if (p.au && (p.au === 'rngw' || AREA_U[p.au])) MEAS.au = p.au; } $('measLU').value = MEAS.lu; $('measAU').value = MEAS.au; }
 addEventListener('keydown', e => {
-  if (!MEAS.on || !$('repModal').hidden || !$('capModal').hidden) return;
+  if (!MEAS.on || WBL.draw || !$('repModal').hidden || !$('capModal').hidden) return;
   const t = e.target; if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
   if (e.key === 'Enter') { if (!MEAS.done && MEAS.pts.length) { measFinish(); e.preventDefault(); } }
   else if (e.key === 'Backspace' || e.key === 'Delete') { measUndo(); e.preventDefault(); }
   else if (e.key === 'Escape') { if (!MEAS.done && MEAS.pts.length) measClear(); else measSet(false); }
+});
+
+// =====================================================================
+// ---------- Wave Breaker lines: drawn on the map and used in the wave calculation ----------
+// A fetch radial that crosses a WB line carries a wave reduced to Kt·H, which keeps growing over the rest of the radial.
+// DS-13 gives Hs ∝ √F for a given wind, so the transmitted wave is replaced by the fetch that would grow it (Kt²·F_up)
+// and growth continues: F' = Kt²·(L − d) + d for each crossing, applied from the far shore inward, before the
+// 9-radial average. Kt = 1 leaves the result unchanged; Kt = 0 makes the line act like a shoreline.
+// =====================================================================
+const WBL_COLS = ['#E879F9', '#22D3EE', '#FACC15', '#A3E635', '#FAFAFA', '#FB7185'];
+const WBL = { lines: [], sel: -1, draw: null, hover: null, cand: -1, drag: -1, apply: true, def: { eta: 40, w: 5, col: WBL_COLS[0] }, segs: null, timer: 0 };
+{ const o = lsGet('fwe-wbl-opt'); if (o) { WBL.apply = o.apply !== false; if (o.def) Object.assign(WBL.def, o.def); } }
+const ktOf = eta => { const e = Math.min(0.99, Math.max(0, eta / 100)); return WB.def === 'e' ? Math.sqrt(1 - e) : 1 - e; };
+const wblLen = l => l.pts.reduce((s, p, i) => i ? s + Math.hypot(p[0] - l.pts[i - 1][0], p[1] - l.pts[i - 1][1]) / utmK((p[0] + l.pts[i - 1][0]) / 2) : 0, 0);
+function wblSummary() {
+  const L = WBL.apply ? WBL.lines.filter(l => l.pts.length >= 2) : [];
+  return L.length ? 'แนว WB ' + L.length + ' แนว (' + L.map(l => l.name + ' η ' + l.eta + '%').join(', ') + ')' : '';
+}
+function wblBuild() {
+  const L = WBL.apply ? WBL.lines.filter(l => l.pts.length >= 2) : [];
+  if (!L.length) { WBL.segs = null; return; }
+  const n = L.reduce((t, l) => t + l.pts.length - 1, 0), S = new Float64Array(n * 4), K2 = new Float64Array(n);
+  let k = 0;
+  for (const l of L) { const kt = ktOf(l.eta); for (let i = 0; i < l.pts.length - 1; i++, k++) { S[k * 4] = l.pts[i][0]; S[k * 4 + 1] = l.pts[i][1]; S[k * 4 + 2] = l.pts[i + 1][0]; S[k * 4 + 3] = l.pts[i + 1][1]; K2[k] = kt * kt; } }
+  WBL.segs = { S, K2 };
+}
+// equivalent fetch along one radial of length L (m) from (x, y) at azimuth deg
+function wbFetch(x, y, deg, L, W) {
+  if (!isFinite(L)) return L;
+  const th = deg * Math.PI / 180, dx = Math.sin(th), dy = Math.cos(th), S = W.S;
+  let hits = null;
+  for (let i = 0, k = 0; i < S.length; i += 4, k++) {
+    const ax = S[i], ay = S[i + 1], ex = S[i + 2] - ax, ey = S[i + 3] - ay, den = dx * ey - dy * ex;
+    if (den === 0) continue;
+    const wx = ax - x, wy = ay - y, t = (wx * ey - wy * ex) / den;
+    if (t <= 1e-6 || t >= L) continue;
+    const u = (wx * dy - wy * dx) / den;
+    if (u >= 0 && u < 1) (hits || (hits = [])).push([t, W.K2[k]]);
+  }
+  if (!hits) return L;
+  hits.sort((a, b) => b[0] - a[0]);
+  let F = 0, at = L;
+  for (const [t, k2] of hits) { F = (F + at - t) * k2; at = t; }
+  return F + at;
+}
+const wbRad = (x, y, rad, W) => W ? rad.map(r => ({ deg: r.deg, L: wbFetch(x, y, r.deg, r.L, W) })) : rad;
+
+// ---- persistence (per reservoir, stored as lon/lat so lines survive zone changes)
+function wblSave() {
+  const all = lsGet('fwe-wbl') || {};
+  all[st.res] = WBL.lines.map(l => ({ name: l.name, eta: l.eta, w: l.w, col: l.col, ll: l.pts.map(p => st.proj.inv(p[0], p[1]).map(v => +v.toFixed(7))) }));
+  lsSet('fwe-wbl', all); lsSet('fwe-wbl-opt', { apply: WBL.apply, def: WBL.def });
+}
+function wblLoad() {
+  const all = lsGet('fwe-wbl') || {};
+  WBL.lines = (all[st.res] || []).filter(l => l && Array.isArray(l.ll) && l.ll.length >= 2).map(l => ({ name: String(l.name || 'WB'), eta: +l.eta || 0, w: +l.w || 5, col: l.col || WBL_COLS[0], pts: l.ll.map(([lo, la]) => st.proj.fwd(lo, la)) }));
+  WBL.sel = -1; if (WBL.draw) wblCancel();
+  wblBuild(); renderWBL();
+}
+// ---- after any change that affects waves: recompute the point now, the perimeter check shortly after
+function wblChanged(recalc = true) {
+  wblSave(); renderWBL(); scheduleDraw();
+  if (!recalc) return;
+  wblBuild(); castPoint();
+  if (CHK.res && CHK.res.res === st.res) {
+    $('wblStale').hidden = false; clearTimeout(WBL.timer);
+    WBL.timer = setTimeout(() => { if (CHK.running) { CHK.token++; CHK.running = false; } runCheck(); }, 450);
+  }
+}
+function setWBDef(v) {
+  WB.def = v === 'e' ? 'e' : 'h'; saveWB();
+  $('wblDef').value = WB.def; if ($('wbDef')) $('wbDef').value = WB.def;
+  if (CHK.res) refreshCheck();
+  if (POP.pc) showPop(POP.pc, POP.pinned);
+  wblChanged(WBL.lines.length > 0);
+}
+// ---- hit tests (screen px)
+function wblHitVertex(px, py, tol) {
+  const l = WBL.lines[WBL.sel]; if (!l) return -1;
+  let bi = -1, bd = tol;
+  l.pts.forEach((p, i) => { const [sx, sy] = toScreen(p[0], p[1]), d = Math.hypot(sx - px, sy - py); if (d <= bd) { bd = d; bi = i; } });
+  return bi;
+}
+function wblHitLine(px, py, tol) {
+  let bi = -1, bd = Infinity;
+  WBL.lines.forEach((l, li) => {
+    for (let i = 1; i < l.pts.length; i++) {
+      const [ax, ay] = toScreen(...l.pts[i - 1]), [bx, by] = toScreen(...l.pts[i]), dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+      const t = l2 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / l2)) : 0, d = Math.hypot(px - ax - t * dx, py - ay - t * dy);
+      if (d <= tol + l.w / 2 && d < bd) { bd = d; bi = li; }
+    }
+  });
+  return bi;
+}
+// ---- drawing a new line
+const wblNextName = () => 'WB-' + (WBL.lines.reduce((m, l) => { const k = /^WB-(\d+)$/.exec(l.name); return k ? Math.max(m, +k[1]) : m; }, 0) + 1);
+function wblStart() {
+  if (MEAS.on) measSet(false);
+  hidePop(true); $('hint').hidden = true;
+  WBL.draw = { pts: [], name: wblNextName() }; WBL.hover = null;
+  $('wblBtn').setAttribute('aria-pressed', true); $('wblDraw').hidden = false; cv.classList.add('measuring');
+  wblDrawUI();
+}
+function wblDrawUI() {
+  const D = WBL.draw; if (!D) return;
+  const n = D.pts.length, touch = matchMedia('(pointer: coarse)').matches, tap = touch ? 'แตะ' : 'คลิก';
+  $('wblDrawName').textContent = 'วาด ' + D.name + ' · η ' + WBL.def.eta + '%';
+  $('wblDrawSw').style.background = WBL.def.col;
+  $('wblDrawLen').textContent = n >= 2 ? fmtLen(wblLen(D)) : '—';
+  $('wblDrawDone').disabled = n < 2; $('wblDrawUndo').disabled = !n;
+  $('wblDrawHint').textContent = !n ? tap + 'บนแผนที่เพื่อวางจุดแรกของแนว WB' : n < 2 ? tap + 'จุดถัดไป' : (touch ? 'แตะจุดสุดท้ายซ้ำ' : 'ดับเบิลคลิก คลิกจุดสุดท้ายซ้ำ หรือกด Enter') + ' เพื่อจบแนว · Esc ยกเลิก';
+  scheduleDraw();
+}
+function wblTap(px, py, e) {
+  const D = WBL.draw, n = D.pts.length, tol = measTol(e);
+  const near = i => { const [sx, sy] = toScreen(...D.pts[i]); return Math.hypot(sx - px, sy - py) <= tol; };
+  if (n >= 2 && near(n - 1)) { wblFinish(); return; }
+  if (n && near(n - 1)) return;
+  D.pts.push(toWorld(px, py)); wblDrawUI();
+}
+function wblEndDraw() { WBL.draw = null; WBL.hover = null; $('wblDraw').hidden = true; $('wblBtn').setAttribute('aria-pressed', false); cv.classList.remove('measuring'); scheduleDraw(); }
+function wblCancel() { wblEndDraw(); }
+function wblFinish() {
+  const D = WBL.draw; if (!D) return;
+  if (D.pts.length < 2) { toast('แนว WB ต้องมีอย่างน้อย 2 จุด'); return; }
+  WBL.lines.push({ name: D.name, pts: D.pts, eta: WBL.def.eta, w: WBL.def.w, col: WBL.def.col });
+  WBL.sel = WBL.lines.length - 1;
+  wblEndDraw(); wblChanged();
+  toast('เพิ่ม ' + D.name + ' แล้ว ปรับ η ความหนา และสีได้ที่กล่อง "แนว Wave Breaker"', 5000);
+}
+function wblSelect(i) { WBL.sel = i; renderWBL(); scheduleDraw(); }
+// ---- map rendering
+function wblPath(P) { ctx.beginPath(); P.forEach(([x, y], j) => j ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); }
+function drawWBL() {
+  if (!WBL.lines.length && !WBL.draw) return;
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  WBL.lines.forEach((l, i) => {
+    if (l.pts.length < 2) return;
+    const P = l.pts.map(p => toScreen(p[0], p[1])), sel = i === WBL.sel;
+    ctx.globalAlpha = WBL.apply ? 1 : 0.5;
+    wblPath(P); ctx.strokeStyle = sel ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.6)'; ctx.lineWidth = l.w + (sel ? 5 : 3); ctx.stroke();
+    wblPath(P); ctx.strokeStyle = l.col; ctx.lineWidth = l.w; if (!WBL.apply) ctx.setLineDash([l.w * 2, l.w * 1.6]); ctx.stroke(); ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+    if (sel && !WBL.draw && !MEAS.on) P.forEach(([x, y], j) => { ctx.beginPath(); ctx.arc(x, y, j === WBL.drag ? 6.5 : 5, 0, 7); ctx.fillStyle = '#0A0A0A'; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = l.col; ctx.stroke(); });
+  });
+  const D = WBL.draw;
+  if (D && D.pts.length) {
+    const P = D.pts.map(p => toScreen(p[0], p[1])), col = WBL.def.col, w = WBL.def.w;
+    if (P.length > 1) { wblPath(P); ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = w + 3; ctx.stroke(); wblPath(P); ctx.strokeStyle = col; ctx.lineWidth = w; ctx.stroke(); }
+    if (WBL.hover) { const h = toScreen(...WBL.hover); ctx.setLineDash([6, 5]); ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(...P[P.length - 1]); ctx.lineTo(...h); ctx.stroke(); ctx.setLineDash([]); }
+    P.forEach(([x, y]) => { ctx.beginPath(); ctx.arc(x, y, 4.5, 0, 7); ctx.fillStyle = '#0A0A0A'; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = col; ctx.stroke(); });
+  }
+}
+function drawWBLLabels() {
+  const boxes = [];
+  WBL.lines.forEach((l, i) => {
+    if (l.pts.length < 2) return;
+    const P = l.pts.map(p => toScreen(p[0], p[1]));
+    let bj = 1, bl = -1;
+    for (let j = 1; j < P.length; j++) { const d = Math.hypot(P[j][0] - P[j - 1][0], P[j][1] - P[j - 1][1]); if (d > bl) { bl = d; bj = j; } }
+    if (bl < 30) return;
+    const a = P[bj - 1], b = P[bj], mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+    if (mx < 0 || my < 0 || mx > W || my > H) return;
+    let nx = -(b[1] - a[1]) / bl, ny = (b[0] - a[0]) / bl; if (ny > 0) { nx = -nx; ny = -ny; }
+    const off = 12 + l.w / 2, t = l.name + ' · η ' + l.eta + '%';
+    ctx.font = '500 11px ' + FONT_MONO; const w = ctx.measureText(t).width + 14, cx = mx + nx * off, cy = my + ny * off;
+    const bx = [cx - w / 2, cy - 10, cx + w / 2, cy + 10];
+    if (boxHit(bx, boxes)) return;
+    boxes.push(mapPill(t, cx, cy, { stroke: l.col }));
+  });
+}
+// ---- panel card
+function renderWBL() {
+  const L = WBL.lines, l = L[WBL.sel];
+  $('wblEmpty').hidden = L.length > 0;
+  $('wblApply').checked = WBL.apply;
+  $('wblDef').value = WB.def;
+  $('wblList').innerHTML = L.map((x, i) => '<button class="wbl-row" role="option" data-wbl="' + i + '" aria-selected="' + (i === WBL.sel) + '"><span class="wbl-sw" style="background:' + x.col + ';height:' + Math.max(3, Math.min(10, x.w)) + 'px"></span><span class="nm">' + x.name.replace(/[<>&]/g, '') + '</span><span class="ln">' + fmtLen(wblLen(x), 'auto') + '</span><span class="et">η ' + x.eta + '%</span></button>').join('');
+  $('wblList').querySelectorAll('[data-wbl]').forEach(b => b.onclick = () => wblSelect(WBL.sel === +b.dataset.wbl ? -1 : +b.dataset.wbl));
+  $('wblEd').hidden = !l;
+  if (!l) return;
+  if (document.activeElement !== $('wblName')) $('wblName').value = l.name;
+  if (document.activeElement !== $('wblEta')) $('wblEta').value = l.eta;
+  const kt = ktOf(l.eta);
+  $('wblKt').innerHTML = 'K<sub>t</sub> = ' + kt.toFixed(2) + ' · คลื่นที่ผ่านแนวเหลือ ' + Math.round(kt * 100) + '% ของความสูง (' + (WB.def === 'e' ? 'นิยามพลังงาน' : 'นิยามความสูง') + ')';
+  $('wblW').value = l.w; $('wblWv').textContent = l.w + ' px';
+  $('wblCols').innerHTML = WBL_COLS.map(c => '<button style="background:' + c + '" data-col="' + c + '" aria-label="สี ' + c + '" aria-pressed="' + (c.toLowerCase() === l.col.toLowerCase()) + '"></button>').join('') + '<input type="color" id="wblCol" aria-label="เลือกสีอื่น" value="' + l.col + '">';
+  $('wblCols').querySelectorAll('[data-col]').forEach(b => b.onclick = () => wblSetCol(b.dataset.col));
+  $('wblCol').oninput = () => wblSetCol($('wblCol').value);
+}
+function wblSetCol(c) { const l = WBL.lines[WBL.sel]; if (!l) return; l.col = WBL.def.col = c; wblChanged(false); }
+$('wblBtn').onclick = () => (WBL.draw ? wblCancel() : wblStart());
+$('wblNew').onclick = () => { wblStart(); $('mapwrap').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); };
+$('wblDrawX').onclick = wblCancel;
+$('wblDrawDone').onclick = wblFinish;
+$('wblDrawUndo').onclick = () => { if (WBL.draw && WBL.draw.pts.length) { WBL.draw.pts.pop(); wblDrawUI(); } };
+$('wblApply').onchange = () => { WBL.apply = $('wblApply').checked; wblChanged(); };
+$('wblDef').onchange = () => setWBDef($('wblDef').value);
+$('wblName').oninput = () => { const l = WBL.lines[WBL.sel]; if (!l) return; l.name = $('wblName').value.trim() || l.name; wblChanged(false); };
+$('wblEta').oninput = () => {
+  const l = WBL.lines[WBL.sel], v = parseFloat($('wblEta').value); if (!l || !isFinite(v)) return;
+  l.eta = WBL.def.eta = Math.round(Math.max(0, Math.min(95, v))); wblChanged();
+};
+$('wblEta').onchange = () => { const l = WBL.lines[WBL.sel]; if (l) $('wblEta').value = l.eta; };
+$('wblW').oninput = () => { const l = WBL.lines[WBL.sel]; if (!l) return; l.w = WBL.def.w = +$('wblW').value; $('wblWv').textContent = l.w + ' px'; wblChanged(false); };
+$('wblDel').onclick = () => { if (WBL.sel < 0) return; const nm = WBL.lines[WBL.sel].name; WBL.lines.splice(WBL.sel, 1); WBL.sel = -1; wblChanged(); toast('ลบ ' + nm + ' แล้ว'); };
+$('wblZoom').onclick = () => {
+  const l = WBL.lines[WBL.sel]; if (!l) return;
+  const xs = l.pts.map(p => p[0]), ys = l.pts.map(p => p[1]), sp = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys), 400);
+  zoomTo((Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2, sp * 1.8); afterView();
+};
+$('wblCopy').onclick = () => {
+  const l = WBL.lines[WBL.sel]; if (!l) return;
+  const lines = ['# FPV Wave Estimator · Wave Breaker line · ' + RES[st.res].th + ' (' + RES[st.res].code + ') · UTM ' + ZONE + 'N', 'Name\t' + l.name, 'Efficiency_pct\t' + l.eta, 'Kt\t' + ktOf(l.eta).toFixed(3) + '\t' + (WB.def === 'e' ? 'eta = 1 - Kt^2' : 'eta = 1 - Kt'), 'Length_m\t' + wblLen(l).toFixed(1), '', 'Point\tE\tN\tLat\tLon'];
+  l.pts.forEach((p, i) => { const [lo, la] = st.proj.inv(p[0], p[1]); lines.push([i + 1, p[0].toFixed(2), p[1].toFixed(2), la.toFixed(7), lo.toFixed(7)].join('\t')); });
+  copyText(lines.join('\n'), null, null, 'คัดลอกพิกัด ' + l.name + ' แล้ว วางใน Excel ได้');
+};
+addEventListener('keydown', e => {
+  if (!WBL.draw || !$('repModal').hidden || !$('capModal').hidden) return;
+  const t = e.target; if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+  if (e.key === 'Enter') { wblFinish(); e.preventDefault(); }
+  else if (e.key === 'Backspace' || e.key === 'Delete') { if (WBL.draw.pts.length) { WBL.draw.pts.pop(); wblDrawUI(); } e.preventDefault(); }
+  else if (e.key === 'Escape') wblCancel();
 });
 
 // boot

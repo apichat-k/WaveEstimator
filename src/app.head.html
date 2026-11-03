@@ -154,6 +154,7 @@ select.chip { padding: 0 10px; width: auto; }
 }
 .hint { bottom: 112px; }
 .toast { bottom: 48px; }
+.legend:not([hidden]) ~ .toast { bottom: 108px; }
 .legend {
   position: absolute; left: 12px; bottom: 64px; display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; max-width: calc(100% - 80px);
   padding: 7px 14px; border-radius: 9999px; background: rgba(10, 10, 10, 0.82); border: 1px solid var(--hair); font-size: 12px; color: var(--muted);
@@ -210,6 +211,26 @@ select.chip { padding: 0 10px; width: auto; }
 .wbk .v.none { font: 500 15px/1.6 var(--font-sans); letter-spacing: 0; color: var(--success); }
 .wbk .s { font: 400 11px/1.5 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
 .nocase { text-transform: none; }
+/* wave breaker lines */
+.wbl-list { display: flex; flex-direction: column; border: 1px solid var(--hair); border-radius: 8px; overflow: hidden; }
+.wbl-list:empty { display: none; }
+.wbl-row { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 10px 12px; border: 0; border-top: 1px solid var(--hair); background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.wbl-row:first-child { border-top: 0; }
+.wbl-row:hover { background: var(--hover); }
+.wbl-row[aria-selected="true"] { background: var(--raised); box-shadow: inset 2px 0 0 var(--ink); }
+.wbl-row .nm { font-size: 13.6px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wbl-row .ln, .wbl-row .et { font: 400 12px var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.wbl-row .et { color: var(--ink); }
+.wbl-sw { width: 18px; height: 6px; border-radius: 3px; flex: none; display: inline-block; }
+.wbl-dt { flex: 1; font: 600 14px/1.3 var(--font-display); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wbl-ed { display: flex; flex-direction: column; gap: 12px; padding: 14px; border: 1px solid var(--hair); border-radius: 8px; background: var(--raised); }
+.wbl-kt { margin: -4px 0 0; font: 400 12px/1.5 var(--font-mono); color: var(--muted); }
+.wbl-cols { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.wbl-cols button { width: 26px; height: 26px; border-radius: 50%; border: 0; padding: 0; cursor: pointer; outline: 2px solid transparent; outline-offset: 3px; }
+.wbl-cols button:hover { outline-color: var(--hair-hi); }
+.wbl-cols button[aria-pressed="true"] { outline-color: var(--ink); }
+.wbl-cols input[type="color"] { width: 36px; height: 28px; padding: 0 2px; border: 1px solid var(--hair); border-radius: 8px; background: var(--canvas); cursor: pointer; }
+#map.onwbl { cursor: pointer; }
 .cfgrow { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border: 1px solid var(--hair); border-radius: 8px; background: var(--raised); }
 .cfg-l { font: 500 10px/1.55 var(--font-mono); letter-spacing: 0.5px; color: var(--muted); text-transform: uppercase; }
 .cfgrow .seg button { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; height: 46px; line-height: 1.2; }
@@ -275,6 +296,8 @@ section.blk + section.blk { border-top: 1px solid var(--hair); }
 .substats .v small { font-size: 11px; color: var(--muted); margin-left: 3px; }
 .flag { font-size: 13px; margin: 0; padding: 10px 14px; border-radius: 8px; border: 1px solid rgba(245, 158, 11, 0.35); color: var(--ink); line-height: 1.55; }
 .flag b { color: var(--warning); font-weight: 500; }
+.flag.info { border-color: var(--hair-hi); }
+.flag.info b { color: var(--ink); }
 
 /* form */
 .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -409,7 +432,17 @@ textarea.fallback { width: 100%; height: 90px; font: 400 11px var(--font-mono); 
           <button class="chip" id="lblToggle" aria-pressed="false" title="แสดงชื่อสถานที่"><span class="sw"></span>ชื่อสถานที่</button>
         </span>
         <button class="chip" id="measBtn" aria-pressed="false" title="วัดระยะทางและพื้นที่บนแผนที่"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M1.8 11.2 11.2 1.8l3 3-9.4 9.4z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M4.4 8.6l1.4 1.4M6.4 6.6l2 2M8.4 4.6l1.4 1.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>วัดระยะ</button>
+        <button class="chip" id="wblBtn" aria-pressed="false" title="วาดแนว Wave Breaker บนแผนที่"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M1.5 11.5 6 6.5l3.5 3 5-5.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M1.5 14.5c1.3 0 1.3-1.1 2.6-1.1s1.3 1.1 2.6 1.1 1.3-1.1 2.6-1.1 1.3 1.1 2.6 1.1 1.3-1.1 2.6-1.1" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" opacity=".7"/></svg>แนว WB</button>
         <div class="mrow">
+          <div class="meas" id="wblDraw" hidden role="region" aria-label="วาดแนว Wave Breaker">
+            <div class="meas-h"><span class="wbl-sw" id="wblDrawSw"></span><b class="wbl-dt" id="wblDrawName">แนว WB ใหม่</b><button class="iconbtn" id="wblDrawX" aria-label="ยกเลิกการวาด" title="ยกเลิกการวาด" style="width:30px;height:30px">×</button></div>
+            <div class="meas-n"><span class="k">ความยาว</span><span class="v" id="wblDrawLen">—</span></div>
+            <div class="btnrow">
+              <button class="btn primary sm" id="wblDrawDone" disabled>จบแนว</button>
+              <button class="btn ghost sm" id="wblDrawUndo" disabled>ย้อนจุด</button>
+            </div>
+            <p class="meas-hint" id="wblDrawHint">คลิกบนแผนที่เพื่อวางจุดแรกของแนว WB</p>
+          </div>
           <div class="meas" id="meas" hidden role="region" aria-label="เครื่องมือวัดระยะ">
             <div class="meas-h">
               <div class="seg sm" id="measMode" role="group" aria-label="แบบการวัด">
@@ -505,6 +538,7 @@ textarea.fallback { width: 100%; height: 90px; font: 400 11px var(--font-mono); 
               </div>
             </div>
             <p class="flag" id="sectorFlag" hidden></p>
+            <p class="flag info" id="wbPtFlag" hidden></p>
           </section>
 
           <section class="blk" aria-labelledby="h-chk">
@@ -549,6 +583,37 @@ textarea.fallback { width: 100%; height: 90px; font: 400 11px var(--font-mono); 
               <p class="flag" id="chkStale" hidden><b>ผลบนแผนที่เป็นของรอบก่อน</b> ค่าลม ทิศ หรือตัวเลือกเปลี่ยนไปแล้ว กด Compute เพื่อคำนวณใหม่</p>
               <div id="chkOut" hidden></div>
               </div>
+            </div>
+          </section>
+
+          <section class="blk" aria-labelledby="h-wbl">
+            <div class="card" id="wblCard">
+              <div class="cardhead">
+                <h2 class="title" id="h-wbl">แนว Wave Breaker</h2>
+                <button class="btn secondary sm" id="wblNew">+ วาดแนว</button>
+              </div>
+              <label class="chkline"><input type="checkbox" id="wblApply" checked><span>คิดผลของแนว WB ในการคำนวณ<small>คลื่นที่ผ่านแนวลดลงเหลือ K<sub>t</sub> เท่า แล้วโตต่อตามระยะที่เหลือ ใช้กับทั้งจุดพิจารณาและการตรวจขอบ</small></span></label>
+              <p class="note" id="wblEmpty">ยังไม่มีแนว WB กด "+ วาดแนว" หรือปุ่ม "แนว WB" บนแผนที่ แล้วคลิกวางจุดบนผิวน้ำ</p>
+              <div class="wbl-list" id="wblList" role="listbox" aria-label="รายการแนว WB"></div>
+              <div class="wbl-ed" id="wblEd" hidden>
+                <div class="row">
+                  <label class="f">ชื่อแนว<input type="text" id="wblName" maxlength="24"></label>
+                  <label class="f"><span>ประสิทธิภาพ η (%)</span><input type="number" id="wblEta" min="0" max="95" step="1"></label>
+                </div>
+                <p class="wbl-kt" id="wblKt">—</p>
+                <div class="f"><span>ความหนาเส้น <b class="mono" id="wblWv">5 px</b></span><input type="range" id="wblW" min="2" max="14" step="1" value="5"></div>
+                <div class="f"><span>สีเส้น</span>
+                  <div class="wbl-cols" id="wblCols" role="group" aria-label="สีเส้น"></div>
+                </div>
+                <div class="btnrow">
+                  <button class="btn ghost sm" id="wblZoom">ซูมไปที่แนว</button>
+                  <button class="btn ghost sm" id="wblCopy">คัดลอกพิกัด</button>
+                  <button class="btn ghost sm" id="wblDel">ลบแนวนี้</button>
+                </div>
+                <p class="note">แก้แนว: ลากจุดของแนวที่เลือกบนแผนที่ · คลิกที่เส้นบนแผนที่เพื่อเลือกแนว</p>
+              </div>
+              <label class="wbdef"><span>นิยาม η</span><select id="wblDef"><option value="h">η = 1 − Ht/Hi (ลดความสูงคลื่น)</option><option value="e">η = 1 − (Ht/Hi)² (ลดพลังงานคลื่น)</option></select></label>
+              <p class="flag" id="wblStale" hidden><b>แนว WB เปลี่ยน</b> กำลังคำนวณผลตรวจขอบใหม่…</p>
             </div>
           </section>
         </div>
@@ -712,6 +777,7 @@ textarea.fallback { width: 100%; height: 90px; font: 400 11px var(--font-mono); 
                 <li><b>H<sub>max</sub></b> = 1.67 H<sub>s</sub> คือความสูงเฉลี่ยของคลื่น 1% ที่สูงที่สุด (มีคลื่นสูงกว่าค่านี้ราว 0.4%) ตาม DS-13 Table B-2</li>
                 <li><b>ตรวจตามแนวขอบ</b> แบ่งเส้นรอบรูปของ Project Boundary และแพแต่ละแพเป็นช่วงตามระยะที่เลือก ทำข้อ 2–5 ที่กึ่งกลางทุกช่วง โดยนับเฉพาะลมที่พัดเข้าหาด้านนอก (ถ้าเลือก) แล้วเทียบ H<sub>s</sub> กับค่าที่รับได้: เขียว &lt; 90%, ส้ม 90–100%, แดงเกิน · ช่วงที่กึ่งกลางอยู่บนบก และขอบร่วมระหว่างแพที่วางติดกัน (ห่างไม่เกิน 1 m) จะไม่ตรวจ เพราะไม่ใช่ขอบที่รับคลื่น</li>
                 <li><b>Wave Breaker</b> ช่วงที่ H<sub>s</sub> เกินค่าที่รับได้ ต้องลดคลื่นให้เหลือไม่เกินค่าที่รับได้ จึงต้องการสัมประสิทธิ์การส่งผ่าน K<sub>t</sub> = H<sub>t</sub>/H<sub>i</sub> ≤ H<sub>s,รับได้</sub>/H<sub>s</sub> และประสิทธิภาพ η = 1 − K<sub>t</sub> (ลดความสูงคลื่น) หรือ 1 − K<sub>t</sub><sup>2</sup> (ลดพลังงานคลื่น) ปัดขึ้นเป็นจำนวนเต็ม % · ประสิทธิภาพของ WB ลอยน้ำขึ้นกับคาบคลื่น จึงแสดง T<sub>p</sub> และ L<sub>0</sub> ของคลื่นออกแบบไว้ให้เทียบกับกราฟ K<sub>t</sub> ของผู้ผลิต</li>
+                <li><b>แนว Wave Breaker ที่วาด</b> รัศมี fetch ที่ตัดผ่านแนว WB ถือว่าคลื่นลดเหลือ K<sub>t</sub> เท่าเมื่อผ่านแนว แล้วโตต่อตามระยะที่เหลือ เพราะ DS-13 ให้ H<sub>s</sub> ∝ √F จึงแทนด้วย fetch เทียบเท่า F′ = K<sub>t</sub><sup>2</sup>·(L − d) + d (L = ระยะถึงฝั่ง, d = ระยะถึงแนว WB, ผ่านหลายแนวคิดต่อเนื่องจากฝั่งเข้ามา) แล้วเฉลี่ย 9 รัศมีตามเดิม · K<sub>t</sub> = 1 − η (นิยามความสูง) หรือ √(1 − η) (นิยามพลังงาน) · ผลสูงกว่าการลดตรง ๆ ราว 1–10% (ด้านปลอดภัย) · ไม่ได้คำนวณการเลี้ยวเบนรอบปลายแนวโดยตรง</li>
                 <li><b>วัดระยะ</b> ระยะทางคำนวณบนทรงรี WGS84 (Vincenty) ทิศเป็นมุมจากทิศเหนือจริง พื้นที่คำนวณจากพิกัด UTM แล้วปรับด้วย scale factor ของ UTM ให้เป็นพื้นที่จริงบนพื้นผิว (1 ไร่ = 1,600 m², 1 งาน = 400 m², 1 ตร.วา = 4 m²)</li>
               </ol>
               <p><b>สมการ DS-13 (F เป็น mile, V เป็น mph, H เป็น ft):</b> <code>tmin = 1.87·F^0.67 / V^0.34</code> (ชม.) · <code>Hs = 0.0245·F^0.5·V·(1.1+0.0156V)^0.5</code> · <code>T = 0.464·F^(1/3)·V^(1/3)·(1.1+0.0156V)^(1/6)</code> · <code>L0 = gT²/2π</code> · ปรับช่วงเวลาลม (CEM): <code>Ut/U3600 = 1.277 + 0.296·tanh(0.9·log(45/t))</code> เมื่อ t &lt; 1 ชม. และ <code>−0.15·log t + 1.5334</code> เมื่อ t ≥ 1 ชม.</p>
